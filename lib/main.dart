@@ -1,6 +1,5 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
-import 'features/home_wrapper.dart'; // 引入主框架
+import 'features/home/home_wrapper.dart'; // 引入主框架
 
 void main() {
   runApp(const MyApp());
@@ -12,12 +11,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Jogy App',
+      title: 'Jogy', debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFF2F2F7),
         primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: const Color(0xFFF5F5F7),
+        useMaterial3: true,
+        fontFamily: 'PingFang SC',
       ),
-      home: const HomeWrapper(), // 这里指向一个主框架页面
+      // 指向 HomeWrapper
+      home: const HomeWrapper(),
     );
   }
 }

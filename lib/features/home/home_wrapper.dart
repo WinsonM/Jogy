@@ -1,9 +1,10 @@
-// lib/features/home_wrapper.dart
 import 'package:flutter/material.dart';
-import '../widgets/glass_nav_bar.dart'; // 引入通用组件
-import 'map/pages/map_page.dart';       // 引入三个具体页面
-import 'message/pages/message_list_page.dart';
-import 'profile/pages/profile_page.dart';
+// 引入通用导航栏组件
+import '../../widgets/glass_nav_bar.dart';
+// 引入三个主要页面
+import '../map/pages/map_page.dart';
+import '../message/pages/message_page.dart';
+import '../profile/pages/profile_page.dart';
 
 class HomeWrapper extends StatefulWidget {
   const HomeWrapper({super.key});
@@ -14,18 +15,13 @@ class HomeWrapper extends StatefulWidget {
 
 class _HomeWrapperState extends State<HomeWrapper> {
   int _currentIndex = 0;
-  
-  // 页面数组
-  final List<Widget> _pages = const [
-    MapPage(),
-    MessageListPage(),
-    ProfilePage(),
-  ];
+
+  final List<Widget> _pages = const [MapPage(), MessagePage(), ProfilePage()];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true,
+      extendBody: true, // 核心：让body延伸到导航栏下面
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: GlassBottomNavBar(
         currentIndex: _currentIndex,
