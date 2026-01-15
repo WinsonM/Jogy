@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
-import 'features/home/home_wrapper.dart'; // 引入主框架
+import 'package:provider/provider.dart';
+import 'features/home/home_wrapper.dart';
+import 'data/repositories/post_repository_impl.dart';
+import 'presentation/providers/post_provider.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => PostProvider(PostRepositoryImpl())..fetchPosts(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -11,14 +19,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Jogy', debugShowCheckedModeBanner: false,
+      title: 'Jogy',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: const Color(0xFFF5F5F7),
-        useMaterial3: true,
-        fontFamily: 'PingFang SC',
       ),
-      // 指向 HomeWrapper
       home: const HomeWrapper(),
     );
   }

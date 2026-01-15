@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
+import '../../../data/models/post_model.dart';
 
 // 核心组件：动态气泡
 class MapBubbleWidget extends StatelessWidget {
   final bool isExpanded;
   final VoidCallback onTap;
   final double scaleFactor;
+  final PostModel post;
 
   const MapBubbleWidget({
     super.key,
     required this.isExpanded,
     required this.onTap,
     this.scaleFactor = 1.0,
+    required this.post,
   });
 
   @override
   Widget build(BuildContext context) {
-    final double baseSize = isExpanded ? 220.0 : 60.0;
+    final double baseSize = isExpanded ? 280.0 : 60.0;
 
     return GestureDetector(
       onTap: onTap,
@@ -51,13 +54,18 @@ class MapBubbleWidget extends StatelessWidget {
   }
 
   Widget _buildCollapsedContent() {
-    return const CircleAvatar(
+    return CircleAvatar(
       radius: 20,
-      backgroundImage: NetworkImage('https://picsum.photos/100/100'),
+      backgroundImage: NetworkImage(post.user.avatarUrl),
+      onBackgroundImageError: (_, __) {},
     );
   }
 
   Widget _buildExpandedContent() {
+    final imageUrl = post.imageUrls.isNotEmpty
+        ? post.imageUrls[0]
+        : 'https://picsum.photos/300/300';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 35),
       child: Column(
@@ -66,20 +74,26 @@ class MapBubbleWidget extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Image.network(
-                'https://picsum.photos/300/300',
+                imageUrl,
                 fit: BoxFit.cover,
                 width: double.infinity,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.error),
+                  );
+                },
               ),
             ),
           ),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: const [
+            children: [
               Icon(
-                Icons.thumb_up_alt_outlined,
+                post.isLiked ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
                 size: 20,
-                color: Colors.black54,
+                color: post.isLiked ? Colors.blue : Colors.black54,
               ),
               Icon(Icons.favorite_border, size: 20, color: Colors.black54),
               Icon(Icons.star_border, size: 20, color: Colors.black54),
