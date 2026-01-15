@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../data/models/post_model.dart';
+import '../../../presentation/providers/post_provider.dart';
 
 // 核心组件：动态气泡
 class MapBubbleWidget extends StatelessWidget {
@@ -43,7 +45,7 @@ class MapBubbleWidget extends StatelessWidget {
                 // Only show content if scale is large enough
                 if (scaleFactor >= 0.5)
                   isExpanded
-                      ? _buildExpandedContent()
+                      ? _buildExpandedContent(context)
                       : _buildCollapsedContent(),
               ],
             ),
@@ -61,7 +63,7 @@ class MapBubbleWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildExpandedContent() {
+  Widget _buildExpandedContent(BuildContext context) {
     final imageUrl = post.imageUrls.isNotEmpty
         ? post.imageUrls[0]
         : 'https://picsum.photos/300/300';
@@ -87,17 +89,40 @@ class MapBubbleWidget extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              Icon(
-                post.isLiked ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
-                size: 20,
-                color: post.isLiked ? Colors.blue : Colors.black54,
-              ),
-              Icon(Icons.favorite_border, size: 20, color: Colors.black54),
-              Icon(Icons.star_border, size: 20, color: Colors.black54),
-            ],
+          // Like and Favorite buttons on both sides
+          Consumer<PostProvider>(
+            builder: (context, postProvider, child) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Like button on left
+                    GestureDetector(
+                      onTap: () {
+                        postProvider.toggleLike(post.id);
+                      },
+                      child: Icon(
+                        post.isLiked ? Icons.favorite : Icons.favorite_border,
+                        size: 24,
+                        color: post.isLiked ? Colors.red : Colors.black54,
+                      ),
+                    ),
+                    // Favorite button on right
+                    GestureDetector(
+                      onTap: () {
+                        postProvider.toggleFavorite(post.id);
+                      },
+                      child: Icon(
+                        post.isFavorited ? Icons.star : Icons.star_border,
+                        size: 24,
+                        color: post.isFavorited ? Colors.amber : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
