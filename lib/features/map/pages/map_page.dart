@@ -214,12 +214,14 @@ class _MapPageState extends State<MapPage> {
                                 post.location.longitude,
                               ),
                               16,
+                              // Center the bubble content in the usable screen area (above nav bar)
+                              // We want the bubble's visual center to be at the screen's visual center
+                              // Offset = (BubbleHeight/2) - BottomOverlay
+                              // Using full BottomOverlay subtraction pushes the bubble higher up, ensuring it's not obscured
                               offset: Offset(
                                 0,
-                                (MapBubbleWidget.expandedHeight -
-                                            MapBubbleWidget.arrowHeight) /
-                                        2 -
-                                    bottomOverlay / 2,
+                                (MapBubbleWidget.expandedHeight / 2) -
+                                    bottomOverlay,
                               ),
                             );
                           }
