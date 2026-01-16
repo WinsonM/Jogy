@@ -16,8 +16,10 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   final MapController _mapController = MapController();
+  static const double _bottomNavBarHeight = 90.0;
 
-  int? _expandedIndex;
+  int? _expandedIndex; // Currently expanded bubble (auto or manual)
+  int? _manualExpandedIndex; // Track user manual click
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -30,12 +32,25 @@ class _MapPageState extends State<MapPage> {
   // Calculate scale factor based on distance from screen center
   void _updateScaleFactors(MapCamera camera) {
     try {
-      final mapSize = camera.size;
-      if (mapSize.x == 0 || mapSize.y == 0) {
+      if (camera.size.x == 0 || camera.size.y == 0) {
         return;
       }
+      final mapSize = camera.size;
 
       final posts = context.read<PostProvider>().posts;
+      final bottomOverlay =
+          _bottomNavBarHeight + MediaQuery.of(context).padding.bottom;
+      final centerX = mapSize.x / 2;
+      final centerY = (mapSize.y - bottomOverlay) / 2;
+      final maxDistance =
+          math.sqrt(mapSize.x * mapSize.x + mapSize.y * mapSize.y) / 2;
+      final expandBand = MapBubbleWidget.collapsedSize;
+      bool needsRebuild = false;
+
+      // Auto-expansion threshold: 30% of screen width (increased for easier triggering)
+      final expansionThreshold = mapSize.x * 0.30;
+      int? closestIndex;
+      double minDistance = double.infinity;
 
       for (int i = 0; i < posts.length; i++) {
         final markerPosition = LatLng(
@@ -43,21 +58,22 @@ class _MapPageState extends State<MapPage> {
           posts[i].location.longitude,
         );
 
-        // Get marker's screen position
+        // Get marker's screen position (this is the bubble tip location)
         final markerPoint = camera.latLngToScreenPoint(markerPosition);
 
-        // Calculate screen center based on map widget size
-        final centerX = mapSize.x / 2;
-        final centerY = mapSize.y / 2;
-
-        // Calculate distance from center
+        // Calculate distance from marker point to center
+        // For auto-expand, we check if the marker enters the center zone
         final dx = markerPoint.x - centerX;
         final dy = markerPoint.y - centerY;
         final distance = math.sqrt(dx * dx + dy * dy);
 
-        // Calculate max distance (screen diagonal / 2)
-        final maxDistance =
-            math.sqrt(mapSize.x * mapSize.x + mapSize.y * mapSize.y) / 2;
+        // Track closest bubble within threshold
+        if (distance < expansionThreshold &&
+            dy.abs() <= expandBand &&
+            distance < minDistance) {
+          minDistance = distance;
+          closestIndex = i;
+        }
 
         // Normalize distance (0 at center, 1 at corners)
         final normalizedDistance = (distance / maxDistance).clamp(0.0, 1.0);
@@ -65,11 +81,31 @@ class _MapPageState extends State<MapPage> {
         // Apply exponential decay for smooth scaling
         // Scale from 1.0 (center) to 0.3 (edges)
         final scaleFactor = 0.3 + (0.7 * (1.0 - normalizedDistance));
-
-        _scaleFactors[i] = scaleFactor.clamp(0.3, 1.0);
+        final clampedScale = scaleFactor.clamp(0.3, 1.0);
+        if ((_scaleFactors[i] ?? 1.0) != clampedScale) {
+          needsRebuild = true;
+        }
+        _scaleFactors[i] = clampedScale;
       }
 
-      setState(() {});
+      // Auto-expand logic
+      if (_manualExpandedIndex == null) {
+        // No manual selection - use auto-expand
+        if (closestIndex != _expandedIndex) {
+          _expandedIndex = closestIndex;
+          needsRebuild = true;
+        }
+      } else {
+        // Keep manual selection
+        if (_expandedIndex != _manualExpandedIndex) {
+          _expandedIndex = _manualExpandedIndex;
+          needsRebuild = true;
+        }
+      }
+
+      if (needsRebuild) {
+        setState(() {});
+      }
     } catch (e) {
       print('Scale update error: $e');
     }
@@ -88,6 +124,8 @@ class _MapPageState extends State<MapPage> {
         }
 
         final posts = postProvider.posts;
+        final bottomOverlay =
+            _bottomNavBarHeight + MediaQuery.of(context).padding.bottom;
 
         // Initialize scale factors if not already done
         if (_scaleFactors.isEmpty && posts.isNotEmpty) {
@@ -98,6 +136,16 @@ class _MapPageState extends State<MapPage> {
 
         if (posts.isEmpty) {
           return const Center(child: Text('No posts found'));
+        }
+
+        // Sort markers: expanded bubble on top (rendered last)
+        final sortedIndices = List<int>.generate(posts.length, (i) => i);
+        if (_expandedIndex != null) {
+          sortedIndices.sort((a, b) {
+            if (a == _expandedIndex) return 1; // Move to end (top layer)
+            if (b == _expandedIndex) return -1;
+            return 0;
+          });
         }
 
         return Stack(
@@ -111,9 +159,11 @@ class _MapPageState extends State<MapPage> {
                 ),
                 initialZoom: 15.0,
                 onTap: (_, __) {
-                  if (_expandedIndex != null) {
-                    setState(() => _expandedIndex = null);
-                  }
+                  // Clear manual selection - restore auto-expand mode
+                  setState(() {
+                    _manualExpandedIndex = null;
+                    _expandedIndex = null;
+                  });
                 },
                 onMapEvent: (event) {
                   // Update scale factors when map moves
@@ -126,9 +176,8 @@ class _MapPageState extends State<MapPage> {
                   userAgentPackageName: 'com.example.app',
                 ),
                 MarkerLayer(
-                  markers: posts.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final post = entry.value;
+                  markers: sortedIndices.map((index) {
+                    final post = posts[index];
                     final isExpanded = _expandedIndex == index;
                     final scaleFactor = _scaleFactors[index] ?? 1.0;
 
@@ -137,9 +186,10 @@ class _MapPageState extends State<MapPage> {
                         post.location.latitude,
                         post.location.longitude,
                       ),
-                      width: 300,
-                      height: 300,
-                      alignment: Alignment.topCenter,
+                      width: MapBubbleWidget.expandedHeight,
+                      height: MapBubbleWidget.expandedHeight,
+                      alignment:
+                          Alignment.bottomCenter, // Tip stays at marker point
                       child: MapBubbleWidget(
                         isExpanded: isExpanded,
                         scaleFactor: scaleFactor,
@@ -153,13 +203,24 @@ class _MapPageState extends State<MapPage> {
                               ),
                             );
                           } else {
-                            setState(() => _expandedIndex = index);
+                            // Manual expand - override auto
+                            setState(() {
+                              _manualExpandedIndex = index;
+                              _expandedIndex = index;
+                            });
                             _mapController.move(
                               LatLng(
                                 post.location.latitude,
                                 post.location.longitude,
                               ),
                               16,
+                              offset: Offset(
+                                0,
+                                (MapBubbleWidget.expandedHeight -
+                                            MapBubbleWidget.arrowHeight) /
+                                        2 -
+                                    bottomOverlay / 2,
+                              ),
                             );
                           }
                         },
