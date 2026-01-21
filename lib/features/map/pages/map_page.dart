@@ -17,9 +17,11 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> {
   final MapController _mapController = MapController();
   static const double _bottomNavBarHeight = 90.0;
+  static const double _expandedBubbleTipYOffset = -32.0;
 
   int? _expandedIndex; // Currently expanded bubble (auto or manual)
   int? _manualExpandedIndex; // Track user manual click
+  int? _suppressedAutoIndex; // Prevent immediate auto re-expand after collapse
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -27,6 +29,22 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
+  }
+
+  Offset _expandedBubbleTipTarget(
+    math.Point<double> mapSize,
+    double bottomOverlay,
+  ) {
+    final visibleCenterY = (mapSize.y - bottomOverlay) / 2;
+    return Offset(mapSize.x / 2, visibleCenterY + _expandedBubbleTipYOffset);
+  }
+
+  Offset _expandedBubbleCenterOffset(
+    math.Point<double> mapSize,
+    double bottomOverlay,
+  ) {
+    final targetTip = _expandedBubbleTipTarget(mapSize, bottomOverlay);
+    return Offset(0, targetTip.dy - (mapSize.y / 2));
   }
 
   // Calculate scale factor based on distance from screen center
@@ -40,12 +58,14 @@ class _MapPageState extends State<MapPage> {
       final posts = context.read<PostProvider>().posts;
       final bottomOverlay =
           _bottomNavBarHeight + MediaQuery.of(context).padding.bottom;
-      final centerX = mapSize.x / 2;
-      final centerY = (mapSize.y - bottomOverlay) / 2;
+      final focusPoint = _expandedBubbleTipTarget(mapSize, bottomOverlay);
+      final centerX = focusPoint.dx;
+      final centerY = focusPoint.dy;
       final maxDistance =
           math.sqrt(mapSize.x * mapSize.x + mapSize.y * mapSize.y) / 2;
       final expandBand = MapBubbleWidget.collapsedSize;
       bool needsRebuild = false;
+      bool suppressedStillEligible = false;
 
       // Auto-expansion threshold: 30% of screen width (increased for easier triggering)
       final expansionThreshold = mapSize.x * 0.30;
@@ -68,11 +88,15 @@ class _MapPageState extends State<MapPage> {
         final distance = math.sqrt(dx * dx + dy * dy);
 
         // Track closest bubble within threshold
-        if (distance < expansionThreshold &&
-            dy.abs() <= expandBand &&
-            distance < minDistance) {
-          minDistance = distance;
-          closestIndex = i;
+        final isEligible =
+            distance < expansionThreshold && dy.abs() <= expandBand;
+        if (isEligible) {
+          if (i == _suppressedAutoIndex) {
+            suppressedStillEligible = true;
+          } else if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = i;
+          }
         }
 
         // Normalize distance (0 at center, 1 at corners)
@@ -86,6 +110,10 @@ class _MapPageState extends State<MapPage> {
           needsRebuild = true;
         }
         _scaleFactors[i] = clampedScale;
+      }
+
+      if (_suppressedAutoIndex != null && !suppressedStillEligible) {
+        _suppressedAutoIndex = null;
       }
 
       // Auto-expand logic
@@ -160,9 +188,11 @@ class _MapPageState extends State<MapPage> {
                 initialZoom: 15.0,
                 onTap: (_, __) {
                   // Clear manual selection - restore auto-expand mode
+                  final collapsedIndex = _expandedIndex;
                   setState(() {
                     _manualExpandedIndex = null;
                     _expandedIndex = null;
+                    _suppressedAutoIndex = collapsedIndex;
                   });
                 },
                 onMapEvent: (event) {
@@ -207,21 +237,19 @@ class _MapPageState extends State<MapPage> {
                             setState(() {
                               _manualExpandedIndex = index;
                               _expandedIndex = index;
+                              _suppressedAutoIndex = null;
                             });
+                            final cameraSize = _mapController.camera.size;
                             _mapController.move(
                               LatLng(
                                 post.location.latitude,
                                 post.location.longitude,
                               ),
                               16,
-                              // Center the bubble content in the usable screen area (above nav bar)
-                              // We want the bubble's visual center to be at the screen's visual center
-                              // Offset = (BubbleHeight/2) - BottomOverlay
-                              // Using full BottomOverlay subtraction pushes the bubble higher up, ensuring it's not obscured
-                              offset: Offset(
-                                0,
-                                (MapBubbleWidget.expandedHeight / 2) -
-                                    bottomOverlay,
+                              // Center the marker tip within the visible map area.
+                              offset: _expandedBubbleCenterOffset(
+                                cameraSize,
+                                bottomOverlay,
                               ),
                             );
                           }
