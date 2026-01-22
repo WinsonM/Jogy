@@ -17,7 +17,7 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> {
   final MapController _mapController = MapController();
   static const double _bottomNavBarHeight = 90.0;
-  static const double _expandedBubbleTipYOffset = -32.0;
+  static const double _expandedBubbleTipYOffset = -162.0; // 上移偏移量：-50（基础） - 112（1/3气泡高度）= -162
 
   int? _expandedIndex; // Currently expanded bubble (auto or manual)
   int? _manualExpandedIndex; // Track user manual click
@@ -43,8 +43,13 @@ class _MapPageState extends State<MapPage> {
     math.Point<double> mapSize,
     double bottomOverlay,
   ) {
+    // MapController.move 的 offset 是相对于屏幕中心的偏移
+    // 屏幕中心是 (mapSize.x / 2, mapSize.y / 2)
+    // 目标位置是 _expandedBubbleTipTarget 返回的位置
     final targetTip = _expandedBubbleTipTarget(mapSize, bottomOverlay);
-    return Offset(0, targetTip.dy - (mapSize.y / 2));
+    final screenCenterY = mapSize.y / 2;
+    // 计算偏移：目标位置 - 屏幕中心
+    return Offset(0, targetTip.dy - screenCenterY);
   }
 
   // Calculate scale factor based on distance from screen center
