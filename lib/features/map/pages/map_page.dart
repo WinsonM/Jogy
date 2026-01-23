@@ -16,8 +16,11 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   final MapController _mapController = MapController();
-  static const double _bottomNavBarHeight = 90.0;
-  static const double _expandedBubbleTipYOffset = -162.0; // 上移偏移量：-50（基础） - 112（1/3气泡高度）= -162
+  // 以屏幕几何中心为基准的 Y 方向偏移（尖角位置）。
+  // 0 表示尖角在屏幕垂直正中心；负值整体往上移，正值整体往下移。
+  // 这里取「往上移动约半个展开气泡高度」，让整块气泡区域落在屏幕视觉中心附近。
+  static const double _expandedBubbleTipYOffset =
+      -MapBubbleWidget.expandedHeight / 2;
 
   int? _expandedIndex; // Currently expanded bubble (auto or manual)
   int? _manualExpandedIndex; // Track user manual click
@@ -31,22 +34,21 @@ class _MapPageState extends State<MapPage> {
     super.initState();
   }
 
+  // 计算“理想尖角位置”（用于自动展开判断和点击居中），只依赖屏幕尺寸，
+  // 与底部导航栏等 UI 高度解耦，保证以后改导航栏不会影响气泡锚点。
   Offset _expandedBubbleTipTarget(
     math.Point<double> mapSize,
-    double bottomOverlay,
   ) {
-    final visibleCenterY = (mapSize.y - bottomOverlay) / 2;
-    return Offset(mapSize.x / 2, visibleCenterY + _expandedBubbleTipYOffset);
+    final screenCenterY = mapSize.y / 2;
+    return Offset(mapSize.x / 2, screenCenterY + _expandedBubbleTipYOffset);
   }
 
   Offset _expandedBubbleCenterOffset(
     math.Point<double> mapSize,
-    double bottomOverlay,
   ) {
-    // MapController.move 的 offset 是相对于屏幕中心的偏移
-    // 屏幕中心是 (mapSize.x / 2, mapSize.y / 2)
-    // 目标位置是 _expandedBubbleTipTarget 返回的位置
-    final targetTip = _expandedBubbleTipTarget(mapSize, bottomOverlay);
+    // MapController.move 的 offset 是相对于屏幕中心的偏移。
+    // 目标位置使用 _expandedBubbleTipTarget 返回的位置（与自动展开一致）。
+    final targetTip = _expandedBubbleTipTarget(mapSize);
     final screenCenterY = mapSize.y / 2;
     // 计算偏移：目标位置 - 屏幕中心
     return Offset(0, targetTip.dy - screenCenterY);
@@ -61,11 +63,13 @@ class _MapPageState extends State<MapPage> {
       final mapSize = camera.size;
 
       final posts = context.read<PostProvider>().posts;
-      final bottomOverlay =
-          _bottomNavBarHeight + MediaQuery.of(context).padding.bottom;
-      final focusPoint = _expandedBubbleTipTarget(mapSize, bottomOverlay);
+
+      // 自动展开的判定中心与点击居中的尖角目标一致，
+      // 只依赖屏幕尺寸，不依赖底部导航栏高度。
+      final focusPoint = _expandedBubbleTipTarget(mapSize);
       final centerX = focusPoint.dx;
       final centerY = focusPoint.dy;
+
       final maxDistance =
           math.sqrt(mapSize.x * mapSize.x + mapSize.y * mapSize.y) / 2;
       final expandBand = MapBubbleWidget.collapsedSize;
@@ -157,8 +161,6 @@ class _MapPageState extends State<MapPage> {
         }
 
         final posts = postProvider.posts;
-        final bottomOverlay =
-            _bottomNavBarHeight + MediaQuery.of(context).padding.bottom;
 
         // Initialize scale factors if not already done
         if (_scaleFactors.isEmpty && posts.isNotEmpty) {
@@ -254,7 +256,6 @@ class _MapPageState extends State<MapPage> {
                               // Center the marker tip within the visible map area.
                               offset: _expandedBubbleCenterOffset(
                                 cameraSize,
-                                bottomOverlay,
                               ),
                             );
                           }
