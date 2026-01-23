@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'chat_page.dart';
 
 class MessagePage extends StatelessWidget {
   const MessagePage({super.key});
@@ -60,71 +61,86 @@ class MessagePage extends StatelessWidget {
         itemCount: 10,
         separatorBuilder: (c, i) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          return Container(
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(40),
-              border: Border.all(color: Colors.black12, width: 0.5),
-            ),
-            child: Row(
-              children: [
-                const SizedBox(width: 10),
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundImage: NetworkImage(
-                        'https://i.pravatar.cc/150?img=$index',
+          final userName = 'User Name $index';
+          final avatarUrl = 'https://i.pravatar.cc/150?img=$index';
+
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ChatPage(userName: userName, avatarUrl: avatarUrl),
+                ),
+              );
+            },
+            child: Container(
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(40),
+                border: Border.all(color: Colors.black12, width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 10),
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundImage: NetworkImage(avatarUrl),
                       ),
-                    ),
-                    if (index < 3)
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 14,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                      if (index < 3)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'User Name $index',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'This is a preview message content...',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                      ),
                     ],
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 20),
-                  child: Text(
-                    '12:00',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'This is a preview message content...',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  Padding(
+                    padding: const EdgeInsets.only(right: 20),
+                    child: Text(
+                      '12:00',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
