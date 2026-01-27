@@ -36,16 +36,17 @@ class _MapPageState extends State<MapPage> {
 
   // 计算“理想尖角位置”（用于自动展开判断和点击居中），只依赖屏幕尺寸，
   // 与底部导航栏等 UI 高度解耦，保证以后改导航栏不会影响气泡锚点。
-  Offset _expandedBubbleTipTarget(
-    math.Point<double> mapSize,
-  ) {
+  Offset _expandedBubbleTipTarget(math.Point<double> mapSize) {
     final screenCenterY = mapSize.y / 2;
-    return Offset(mapSize.x / 2, screenCenterY + _expandedBubbleTipYOffset);
+    // 向上偏移 1/3 屏幕高度
+    final upwardOffset = mapSize.y / 7;
+    return Offset(
+      mapSize.x / 2,
+      screenCenterY + _expandedBubbleTipYOffset - upwardOffset,
+    );
   }
 
-  Offset _expandedBubbleCenterOffset(
-    math.Point<double> mapSize,
-  ) {
+  Offset _expandedBubbleCenterOffset(math.Point<double> mapSize) {
     // MapController.move 的 offset 是相对于屏幕中心的偏移。
     // 目标位置使用 _expandedBubbleTipTarget 返回的位置（与自动展开一致）。
     final targetTip = _expandedBubbleTipTarget(mapSize);
@@ -203,6 +204,13 @@ class _MapPageState extends State<MapPage> {
                   });
                 },
                 onMapEvent: (event) {
+                  // When user drags the map, clear manual selection to restore auto-expand mode
+                  if (event is MapEventMove &&
+                      event.source == MapEventSource.onDrag) {
+                    if (_manualExpandedIndex != null) {
+                      _manualExpandedIndex = null;
+                    }
+                  }
                   // Update scale factors when map moves
                   _updateScaleFactors(event.camera);
                 },
@@ -254,9 +262,7 @@ class _MapPageState extends State<MapPage> {
                               ),
                               16,
                               // Center the marker tip within the visible map area.
-                              offset: _expandedBubbleCenterOffset(
-                                cameraSize,
-                              ),
+                              offset: _expandedBubbleCenterOffset(cameraSize),
                             );
                           }
                         },

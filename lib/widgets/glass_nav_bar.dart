@@ -13,21 +13,37 @@ class GlassBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Custom color requested by user
     const activeColor = Color.fromARGB(255, 15, 245, 191);
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double totalWidth = constraints.maxWidth - 32; // -32 for margin
-        // Selected item gets 40% width, unselected get 30% each (total 100%)
-        // 40% is > 1/3 (33.3%)
-        final double selectedWidth = totalWidth * 0.4;
-        final double unselectedWidth = totalWidth * 0.3;
+        // 获取设备底部安全区域高度，兼容不同机型
+        final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
+        final double bottomPadding = bottomSafeArea + 8;
+
+        // 计算导航栏内部可用宽度
+        final double containerPadding = 8 * 2; // horizontal padding
+        final double itemMargin = 4 * 2; // margin per item
+        final double totalInnerWidth =
+            constraints.maxWidth - 32 - containerPadding; // 32 = outer padding
+
+        // flex 比例: 选中项 2, 未选中项 1, 总共 = 2 + 1 + 1 = 4
+        final double flexUnit = totalInnerWidth / 4;
+        final double selectedItemWidth = flexUnit * 2;
+        final double unselectedItemWidth = flexUnit * 1;
+
+        // 计算选中指示器的位置
+        double indicatorLeft = 0;
+        for (int i = 0; i < currentIndex; i++) {
+          indicatorLeft += (i == currentIndex)
+              ? selectedItemWidth
+              : unselectedItemWidth;
+        }
 
         return Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 34),
+            padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(40),
               child: BackdropFilter(
@@ -35,7 +51,7 @@ class GlassBottomNavBar extends StatelessWidget {
                 child: Container(
                   height: 80,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(40),
                     boxShadow: [
                       BoxShadow(
@@ -45,39 +61,53 @@ class GlassBottomNavBar extends StatelessWidget {
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  child: Stack(
                     children: [
-                      _buildNavItem(
-                        index: 0,
-                        icon: Icons.home,
-                        label: '主页',
-                        isSelected: currentIndex == 0,
-                        width: currentIndex == 0
-                            ? selectedWidth
-                            : unselectedWidth,
-                        activeColor: activeColor,
+                      // 滑动选中指示器背景
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        left: indicatorLeft,
+                        top: 0,
+                        bottom: 0,
+                        width: selectedItemWidth,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(32),
+                          ),
+                        ),
                       ),
-                      _buildNavItem(
-                        index: 1,
-                        icon: Icons.chat_bubble,
-                        label: '消息',
-                        isSelected: currentIndex == 1,
-                        width: currentIndex == 1
-                            ? selectedWidth
-                            : unselectedWidth,
-                        activeColor: activeColor,
-                      ),
-                      _buildNavItem(
-                        index: 2,
-                        icon: Icons.person,
-                        label: '我的',
-                        isSelected: currentIndex == 2,
-                        width: currentIndex == 2
-                            ? selectedWidth
-                            : unselectedWidth,
-                        activeColor: activeColor,
+                      // 导航项 Row - 使用透明背景
+                      Row(
+                        children: [
+                          _buildNavItem(
+                            index: 0,
+                            icon: Icons.home,
+                            label: '主页',
+                            isSelected: currentIndex == 0,
+                            activeColor: activeColor,
+                          ),
+                          _buildNavItem(
+                            index: 1,
+                            icon: Icons.chat_bubble,
+                            label: '消息',
+                            isSelected: currentIndex == 1,
+                            activeColor: activeColor,
+                          ),
+                          _buildNavItem(
+                            index: 2,
+                            icon: Icons.person,
+                            label: '我的',
+                            isSelected: currentIndex == 2,
+                            activeColor: activeColor,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -95,62 +125,57 @@ class GlassBottomNavBar extends StatelessWidget {
     required IconData icon,
     required String label,
     required bool isSelected,
-    required double width,
     required Color activeColor,
   }) {
-    return GestureDetector(
-      onTap: () => onTap(index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.fastOutSlowIn,
-        width: width,
-        height: 64, // Slightly smaller than container height (80)
-        decoration: BoxDecoration(
-          // Bubble background color
-          // Using a subtle grey for the selected background to let the icon pop,
-          // matching the style of the provided images (grey bubble).
-          color: isSelected ? Colors.grey.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(32),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 28,
-              color: isSelected ? activeColor : Colors.grey[600],
-            ),
-            if (isSelected) ...[
-              const SizedBox(height: 4),
+    return Expanded(
+      flex: isSelected ? 2 : 1,
+      child: GestureDetector(
+        onTap: () => onTap(index),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          height: 64,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          // 背景由 Stack 中的指示器提供，这里透明
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(32),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 图标带弹性动画
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 1.0, end: isSelected ? 1.1 : 1.0),
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutBack,
+                builder: (context, scale, child) {
+                  return Transform.scale(
+                    scale: scale,
+                    child: Icon(
+                      icon,
+                      size: 24,
+                      color: isSelected ? activeColor : Colors.grey[600],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 2),
               Text(
                 label,
                 style: TextStyle(
-                  color: activeColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                  color: isSelected ? activeColor : Colors.grey[600],
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            // Optional: Show label for unselected?
-            // The "plump" look usually has label only on selected or all?
-            // The images show labels on ALL items but the selected one is emphasized.
-            // Wait, looking closer at image 2: All items have labels ("主页", "广播", "资料库").
-            if (!isSelected) ...[
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
