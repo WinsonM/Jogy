@@ -8,154 +8,145 @@ class MessagePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          '消息',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 28,
-          ),
-        ),
-        centerTitle: false,
-        actions: [
-          Theme(
-            data: Theme.of(context).copyWith(
-              popupMenuTheme: PopupMenuThemeData(
-                color: const Color(0xFF4C4C4C),
-                textStyle: const TextStyle(color: Colors.white),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+      body: Column(
+        children: [
+          // 顶部安全区域间距
+          SizedBox(height: MediaQuery.of(context).padding.top + 12),
+          // 顶部标题气泡
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
                 ),
-              ),
-            ),
-            child: PopupMenuButton<String>(
-              icon: Container(
-                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black, width: 1.5),
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(25),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: const Icon(Icons.add, color: Colors.black, size: 20),
+                child: const Text(
+                  '消息',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                  ),
+                ),
               ),
-              offset: const Offset(0, 50),
-              itemBuilder: (context) => [
-                _buildPopupItem(Icons.chat_bubble_outline, '发起群聊'),
-                _buildPopupItem(Icons.person_add_alt, '添加朋友'),
-                _buildPopupItem(Icons.qr_code_scanner, '扫一扫'),
-              ],
             ),
           ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: ListView.separated(
-        padding: const EdgeInsets.only(
-          top: 10,
-          bottom: 100,
-          left: 16,
-          right: 16,
-        ),
-        itemCount: 10,
-        separatorBuilder: (c, i) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final userName = 'User Name $index';
-          final avatarUrl = 'https://i.pravatar.cc/150?img=$index';
-
-          return GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ChatPage(userName: userName, avatarUrl: avatarUrl),
-                ),
-              );
-            },
-            child: Container(
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(40),
-                border: Border.all(color: Colors.black12, width: 0.5),
+          // 消息列表
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.only(
+                top: 0,
+                bottom: 100,
+                left: 16,
+                right: 16,
               ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 10),
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundImage: NetworkImage(avatarUrl),
+              itemCount: 10,
+              separatorBuilder: (c, i) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final userName = 'User Name $index';
+                final avatarUrl = 'https://i.pravatar.cc/150?img=$index';
+
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ChatPage(userName: userName, avatarUrl: avatarUrl),
                       ),
-                      if (index < 3)
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    );
+                  },
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(40),
+                      border: Border.all(color: Colors.black12, width: 0.5),
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          userName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                        const SizedBox(width: 10),
+                        Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundImage: NetworkImage(avatarUrl),
+                            ),
+                            if (index < 3)
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                userName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'This is a preview message content...',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'This is a preview message content...',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 13,
+                        Padding(
+                          padding: const EdgeInsets.only(right: 20),
+                          child: Text(
+                            '12:00',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 20),
-                    child: Text(
-                      '12:00',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _buildPopupItem(IconData icon, String text) {
-    return PopupMenuItem(
-      value: text,
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 20),
-          const SizedBox(width: 12),
-          Text(text, style: const TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );
