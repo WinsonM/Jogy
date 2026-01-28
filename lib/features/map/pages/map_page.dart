@@ -1,11 +1,15 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../widgets/map_bubble.dart';
 import '../../detail/pages/detail_page.dart';
 import '../../../presentation/providers/post_provider.dart';
+import '../../../config/map_config.dart';
+import '../../../data/datasources/mock_data_source.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -29,9 +33,60 @@ class _MapPageState extends State<MapPage> {
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
 
+  // 用户位置相关
+  LatLng? _userLocation;
+  bool _locationLoading = true;
+
   @override
   void initState() {
     super.initState();
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() => _locationLoading = false);
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() => _locationLoading = false);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _locationLoading = false);
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      // 设置 MockDataSource 的中心点为用户位置
+      MockDataSource.setCenter(position.latitude, position.longitude);
+
+      setState(() {
+        _userLocation = LatLng(position.latitude, position.longitude);
+        _locationLoading = false;
+      });
+
+      // 刷新 posts 以使用新的位置
+      if (mounted) {
+        Provider.of<PostProvider>(context, listen: false).fetchPosts();
+      }
+    } catch (e) {
+      print('获取位置失败: $e');
+      setState(() => _locationLoading = false);
+    }
   }
 
   // 计算“理想尖角位置”（用于自动展开判断和点击居中），只依赖屏幕尺寸，
@@ -155,6 +210,11 @@ class _MapPageState extends State<MapPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 位置加载中显示加载指示器
+    if (_locationLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Consumer<PostProvider>(
       builder: (context, postProvider, child) {
         if (postProvider.isLoading) {
@@ -188,16 +248,17 @@ class _MapPageState extends State<MapPage> {
           });
         }
 
+        // 使用用户位置作为中心，如果获取失败则使用第一个 post 位置
+        final mapCenter =
+            _userLocation ??
+            LatLng(posts[0].location.latitude, posts[0].location.longitude);
+
         return Stack(
           children: [
             FlutterMap(
               mapController: _mapController,
               options: MapOptions(
-                initialCenter: LatLng(
-                  //目前中心是第一个post，后续改为当前使用者的位置信息
-                  posts[0].location.latitude,
-                  posts[0].location.longitude,
-                ),
+                initialCenter: mapCenter,
                 initialZoom: 15.0,
                 onTap: (_, __) {
                   // Clear manual selection - restore auto-expand mode
@@ -222,9 +283,23 @@ class _MapPageState extends State<MapPage> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.app',
+                  urlTemplate: MapConfig.tileUrl,
+                  userAgentPackageName: 'com.example.jogy',
                 ),
+                // 用户位置标记 - 先渲染，确保不会遮挡展开的气泡
+                if (_userLocation != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _userLocation!,
+                        width: MapBubbleWidget.collapsedSize,
+                        height: MapBubbleWidget.collapsedSize,
+                        alignment: Alignment.bottomCenter,
+                        child: const _UserLocationMarker(),
+                      ),
+                    ],
+                  ),
+                // Posts 气泡 - 后渲染，展开的气泡在最上层
                 MarkerLayer(
                   markers: sortedIndices.map((index) {
                     final post = posts[index];
@@ -382,4 +457,67 @@ class _MapPageState extends State<MapPage> {
       },
     );
   }
+}
+
+// 用户位置标记 - 使用与气泡缩小时相同的样式，颜色为橙色
+class _UserLocationMarker extends StatelessWidget {
+  const _UserLocationMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    const double size = MapBubbleWidget.collapsedSize;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        size: Size(size, size),
+        painter: _UserBubblePainter(color: Colors.orange),
+      ),
+    );
+  }
+}
+
+// 用户气泡画笔 - 与 MapBubble 缩小状态相同的形状
+class _UserBubblePainter extends CustomPainter {
+  final Color color;
+
+  _UserBubblePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = _buildCollapsedBubblePath(size);
+
+    // 绘制阴影
+    canvas.drawShadow(path, Colors.black.withOpacity(0.15), 10.0, true);
+    // 绘制气泡
+    canvas.drawPath(path, paint);
+  }
+
+  ui.Path _buildCollapsedBubblePath(Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // 圆形部分
+    final circlePath = ui.Path()
+      ..addOval(
+        Rect.fromCircle(center: Offset(w / 2, h / 2 - 5), radius: w / 2 - 5),
+      );
+
+    // 箭头部分
+    final arrowHeight = MapBubbleWidget.arrowHeight;
+    final arrow = ui.Path()
+      ..moveTo(w / 2 - 8, h - arrowHeight)
+      ..lineTo(w / 2, h)
+      ..lineTo(w / 2 + 8, h - arrowHeight)
+      ..close();
+
+    return ui.Path.combine(ui.PathOperation.union, circlePath, arrow);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

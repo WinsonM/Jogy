@@ -1,9 +1,35 @@
+import 'dart:math' as math;
 import '../models/post_model.dart';
 import '../models/user_model.dart';
 import '../models/location_model.dart';
 import '../models/comment_model.dart';
 
 class MockDataSource {
+  // 用于动态生成模拟数据的中心点位置
+  // 默认使用北京坐标，可以通过 setCenter 更新为用户当前位置
+  static double _centerLat = 39.9042;
+  static double _centerLng = 116.4074;
+
+  // 设置中心点位置（通常在获取用户位置后调用）
+  static void setCenter(double lat, double lng) {
+    _centerLat = lat;
+    _centerLng = lng;
+  }
+
+  // 在中心点周围生成随机偏移（约 100-500 米范围内）
+  static LocationModel _randomLocationNear(String placeName, String address) {
+    final random = math.Random();
+    // 生成 -0.003 到 0.003 的随机偏移（约 300 米范围）
+    final latOffset = (random.nextDouble() - 0.5) * 0.006;
+    final lngOffset = (random.nextDouble() - 0.5) * 0.006;
+    return LocationModel(
+      latitude: _centerLat + latOffset,
+      longitude: _centerLng + lngOffset,
+      placeName: placeName,
+      address: address,
+    );
+  }
+
   // Mock users
   static final List<UserModel> _users = [
     const UserModel(
@@ -40,7 +66,7 @@ class MockDataSource {
     ),
   ];
 
-  // Mock posts
+  // Mock posts - 动态生成在中心点周围
   static List<PostModel> getPosts() {
     final now = DateTime.now();
 
@@ -48,14 +74,8 @@ class MockDataSource {
       PostModel(
         id: 'post1',
         user: _users[0],
-        location: const LocationModel(
-          latitude: 39.9042,
-          longitude: 116.4074,
-          placeName: 'Forbidden City',
-          address: 'Beijing, China',
-        ),
-        content:
-            'Amazing architecture! The Forbidden City is truly breathtaking 🏯',
+        location: _randomLocationNear('Nearby Cafe', 'Your Area'),
+        content: 'Amazing architecture! This place is truly breathtaking 🏯',
         imageUrls: [
           'https://picsum.photos/400/400?random=1',
           'https://picsum.photos/400/400?random=11',
@@ -88,13 +108,8 @@ class MockDataSource {
       PostModel(
         id: 'post2',
         user: _users[1],
-        location: const LocationModel(
-          latitude: 39.9082,
-          longitude: 116.4014,
-          placeName: 'Jingshan Park',
-          address: 'Beijing, China',
-        ),
-        content: 'Sunset view from Jingshan Park 🌅',
+        location: _randomLocationNear('Park View', 'Your Area'),
+        content: 'Sunset view from the park 🌅',
         imageUrls: [
           'https://picsum.photos/400/400?random=2',
           'https://picsum.photos/400/400?random=12',
@@ -109,13 +124,8 @@ class MockDataSource {
       PostModel(
         id: 'post3',
         user: _users[2],
-        location: const LocationModel(
-          latitude: 39.9000,
-          longitude: 116.4100,
-          placeName: 'Wangfujing Street',
-          address: 'Beijing, China',
-        ),
-        content: 'Best street food in Beijing! 🍢',
+        location: _randomLocationNear('Food Street', 'Your Area'),
+        content: 'Best street food around! 🍢',
         imageUrls: ['https://picsum.photos/400/400?random=3'],
         likes: 890,
         isLiked: false,
@@ -134,13 +144,8 @@ class MockDataSource {
       PostModel(
         id: 'post4',
         user: _users[3],
-        location: const LocationModel(
-          latitude: 39.9065,
-          longitude: 116.4120,
-          placeName: 'Beihai Park',
-          address: 'Beijing, China',
-        ),
-        content: 'Morning walk at Beihai Park 🚶‍♂️',
+        location: _randomLocationNear('Morning Walk Spot', 'Your Area'),
+        content: 'Morning walk at the park 🚶‍♂️',
         imageUrls: ['https://picsum.photos/400/400?random=4'],
         likes: 123,
         isLiked: true,
@@ -150,13 +155,8 @@ class MockDataSource {
       PostModel(
         id: 'post5',
         user: _users[0],
-        location: const LocationModel(
-          latitude: 39.9023,
-          longitude: 116.4022,
-          placeName: 'Temple of Heaven',
-          address: 'Beijing, China',
-        ),
-        content: 'Ancient temple architecture 🏛️',
+        location: _randomLocationNear('Historic Site', 'Your Area'),
+        content: 'Ancient architecture 🏛️',
         imageUrls: ['https://picsum.photos/400/400?random=5'],
         likes: 456,
         isLiked: false,
@@ -166,12 +166,7 @@ class MockDataSource {
       PostModel(
         id: 'post6',
         user: _users[1],
-        location: const LocationModel(
-          latitude: 39.9101,
-          longitude: 116.4093,
-          placeName: 'Lama Temple',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Temple', 'Your Area'),
         content: 'Peaceful atmosphere here 🙏',
         imageUrls: ['https://picsum.photos/400/400?random=6'],
         likes: 678,
@@ -182,12 +177,7 @@ class MockDataSource {
       PostModel(
         id: 'post7',
         user: _users[2],
-        location: const LocationModel(
-          latitude: 39.9076,
-          longitude: 116.4181,
-          placeName: '798 Art Zone',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Art District', 'Your Area'),
         content: 'Modern art meets old factory 🎨',
         imageUrls: ['https://picsum.photos/400/400?random=7'],
         likes: 789,
@@ -198,12 +188,7 @@ class MockDataSource {
       PostModel(
         id: 'post8',
         user: _users[3],
-        location: const LocationModel(
-          latitude: 39.8989,
-          longitude: 116.4048,
-          placeName: 'Qianmen Street',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Shopping Street', 'Your Area'),
         content: 'Traditional shopping street 🏮',
         imageUrls: ['https://picsum.photos/400/400?random=8'],
         likes: 345,
@@ -214,13 +199,8 @@ class MockDataSource {
       PostModel(
         id: 'post9',
         user: _users[0],
-        location: const LocationModel(
-          latitude: 39.9124,
-          longitude: 116.4010,
-          placeName: 'Drum Tower',
-          address: 'Beijing, China',
-        ),
-        content: 'Historic drumming performance 🥁',
+        location: _randomLocationNear('Tower', 'Your Area'),
+        content: 'Historic performance 🥁',
         imageUrls: ['https://picsum.photos/400/400?random=9'],
         likes: 234,
         isLiked: false,
@@ -230,12 +210,7 @@ class MockDataSource {
       PostModel(
         id: 'post10',
         user: _users[1],
-        location: const LocationModel(
-          latitude: 39.9051,
-          longitude: 116.3969,
-          placeName: 'Houhai Lake',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Lakeside', 'Your Area'),
         content: 'Lakeside cafe vibes ☕',
         imageUrls: ['https://picsum.photos/400/400?random=10'],
         likes: 567,
@@ -246,12 +221,7 @@ class MockDataSource {
       PostModel(
         id: 'post11',
         user: _users[2],
-        location: const LocationModel(
-          latitude: 39.8998,
-          longitude: 116.4157,
-          placeName: 'Yonghe Temple',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Temple Garden', 'Your Area'),
         content: 'Incense and prayers 🕯️',
         imageUrls: ['https://picsum.photos/400/400?random=11'],
         likes: 890,
@@ -262,12 +232,7 @@ class MockDataSource {
       PostModel(
         id: 'post12',
         user: _users[3],
-        location: const LocationModel(
-          latitude: 39.9033,
-          longitude: 116.4205,
-          placeName: 'Sanlitun',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Nightlife District', 'Your Area'),
         content: 'Nightlife district 🌃',
         imageUrls: ['https://picsum.photos/400/400?random=12'],
         likes: 1234,
@@ -278,12 +243,7 @@ class MockDataSource {
       PostModel(
         id: 'post13',
         user: _users[0],
-        location: const LocationModel(
-          latitude: 39.9132,
-          longitude: 116.4134,
-          placeName: 'Confucius Temple',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Cultural Center', 'Your Area'),
         content: 'Learning from the ancient wise 📚',
         imageUrls: ['https://picsum.photos/400/400?random=13'],
         likes: 456,
@@ -294,12 +254,7 @@ class MockDataSource {
       PostModel(
         id: 'post14',
         user: _users[1],
-        location: const LocationModel(
-          latitude: 39.8975,
-          longitude: 116.4099,
-          placeName: 'Tiantan Park',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Park', 'Your Area'),
         content: 'Morning tai chi session 🧘',
         imageUrls: ['https://picsum.photos/400/400?random=14'],
         likes: 678,
@@ -310,12 +265,7 @@ class MockDataSource {
       PostModel(
         id: 'post15',
         user: _users[2],
-        location: const LocationModel(
-          latitude: 39.9090,
-          longitude: 116.3958,
-          placeName: 'Shichahai',
-          address: 'Beijing, China',
-        ),
+        location: _randomLocationNear('Lake', 'Your Area'),
         content: 'Boat ride on the lake 🚣',
         imageUrls: ['https://picsum.photos/400/400?random=15'],
         likes: 901,

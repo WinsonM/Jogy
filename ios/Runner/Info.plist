@@ -50,5 +50,9 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>我们需要获取您的位置以在地图上显示您附近的内容</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>我们需要获取您的位置以在地图上显示您附近的内容</string>
 </dict>
 </plist>
