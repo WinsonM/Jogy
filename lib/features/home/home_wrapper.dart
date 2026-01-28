@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 // 引入通用导航栏组件
 import '../../widgets/glass_nav_bar.dart';
-// 引入三个主要页面
+// 引入两个主要页面
 import '../map/pages/map_page.dart';
 import '../message/pages/message_page.dart';
-import '../profile/pages/profile_page.dart';
 
 class HomeWrapper extends StatefulWidget {
   const HomeWrapper({super.key});
@@ -16,7 +15,7 @@ class HomeWrapper extends StatefulWidget {
 class _HomeWrapperState extends State<HomeWrapper> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [MapPage(), MessagePage(), ProfilePage()];
+  final List<Widget> _pages = const [MapPage(), MessagePage()];
 
   @override
   Widget build(BuildContext context) {

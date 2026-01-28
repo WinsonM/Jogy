@@ -48,7 +48,7 @@ class MapBubbleWidget extends StatelessWidget {
                 CustomPaint(
                   size: Size(baseSize, bubbleHeight),
                   painter: BubblePainter(
-                    color: const Color.fromARGB(255, 15, 245, 191),
+                    color: const Color(0xFF3FAAF0), // 与 chat_page 聊天气泡颜色一致
                     isExpanded: isExpanded,
                   ),
                 ),

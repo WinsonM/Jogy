@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../profile/pages/profile_page.dart';
 
 class ChatPage extends StatefulWidget {
   final String userName;
@@ -108,31 +109,43 @@ class _ChatPageState extends State<ChatPage> {
         ),
       ),
       centerTitle: true,
-      title: Column(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: const Color(0xFF9FA6C5), // Placeholder color
-            child: const Text('周', style: TextStyle(color: Colors.white)),
-            // In real app use widget.avatarUrl if available
-            // backgroundImage: NetworkImage(widget.avatarUrl),
-          ),
-          const SizedBox(height: 2),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.userName,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 12,
-                  fontWeight: FontWeight.normal,
-                ),
+      title: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProfilePage(
+                userName: widget.userName,
+                avatarUrl: widget.avatarUrl,
+                isFollowing: false, // TODO: 从数据库获取关注状态
               ),
-              const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
-            ],
-          ),
-        ],
+            ),
+          );
+        },
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0xFF9FA6C5),
+              backgroundImage: NetworkImage(widget.avatarUrl),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.userName,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+              ],
+            ),
+          ],
+        ),
       ),
       actions: const [
         // No video button as requested

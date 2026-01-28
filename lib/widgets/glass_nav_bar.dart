@@ -12,8 +12,6 @@ class GlassBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = Color.fromARGB(255, 15, 245, 191);
-
     return LayoutBuilder(
       builder: (context, constraints) {
         // 获取设备底部安全区域高度，兼容不同机型
@@ -80,24 +78,25 @@ class GlassBottomNavBar extends StatelessWidget {
                     children: [
                       _buildNavItem(
                         index: 0,
-                        icon: Icons.home,
+                        filledIcon: Icons.home,
+                        outlinedIcon: Icons.home_outlined,
                         label: '主页',
                         isSelected: currentIndex == 0,
-                        activeColor: activeColor,
                       ),
                       _buildNavItem(
                         index: 1,
-                        icon: Icons.chat_bubble,
+                        filledIcon: Icons.chat_bubble,
+                        outlinedIcon: Icons.chat_bubble_outline,
                         label: '消息',
                         isSelected: currentIndex == 1,
-                        activeColor: activeColor,
                       ),
+                      // "我的"按钮 - 点击时不切换页面，保持禁用状态
                       _buildNavItem(
-                        index: 2,
-                        icon: Icons.person,
+                        index: -1, // 使用 -1 表示不参与页面切换
+                        filledIcon: Icons.person,
+                        outlinedIcon: Icons.person_outline,
                         label: '我的',
-                        isSelected: currentIndex == 2,
-                        activeColor: activeColor,
+                        isSelected: false, // 永远不选中
                       ),
                     ],
                   ),
@@ -112,15 +111,19 @@ class GlassBottomNavBar extends StatelessWidget {
 
   Widget _buildNavItem({
     required int index,
-    required IconData icon,
+    required IconData filledIcon,
+    required IconData outlinedIcon,
     required String label,
     required bool isSelected,
-    required Color activeColor,
   }) {
+    // 选中时用实心图标，未选中时用空心图标
+    const itemColor = Colors.black;
+    final icon = isSelected ? filledIcon : outlinedIcon;
+
     return Expanded(
       flex: isSelected ? 2 : 1,
       child: GestureDetector(
-        onTap: () => onTap(index),
+        onTap: index >= 0 ? () => onTap(index) : null, // index < 0 时不响应点击
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
@@ -145,11 +148,7 @@ class GlassBottomNavBar extends StatelessWidget {
                 builder: (context, scale, child) {
                   return Transform.scale(
                     scale: scale,
-                    child: Icon(
-                      icon,
-                      size: 24,
-                      color: isSelected ? activeColor : Colors.grey[600],
-                    ),
+                    child: Icon(icon, size: 24, color: itemColor),
                   );
                 },
               ),
@@ -157,7 +156,7 @@ class GlassBottomNavBar extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  color: isSelected ? activeColor : Colors.grey[600],
+                  color: itemColor,
                   fontSize: 11,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 ),
