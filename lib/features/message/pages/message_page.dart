@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'chat_page.dart';
 
@@ -6,169 +7,169 @@ class MessagePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
-      body: Column(
+      body: Stack(
         children: [
-          // 顶部安全区域间距
-          SizedBox(height: MediaQuery.of(context).padding.top + 12),
-          // 顶部标题气泡
-          Padding(
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Text(
-                  '消息',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24,
-                  ),
-                ),
+          // 全屏消息列表 - 使用 ShaderMask 实现顶部和底部渐变
+          ShaderMask(
+            shaderCallback: (Rect bounds) {
+              return LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: const [
+                  Colors.transparent,
+                  Colors.white,
+                  Colors.white,
+                  Colors.transparent,
+                ],
+                // 顶部渐变到安全区域+标题按钮下方，底部 15% 渐变
+                stops: [0.0, (topPadding + 70) / bounds.height, 0.85, 1.0],
+              ).createShader(bounds);
+            },
+            blendMode: BlendMode.dstIn,
+            child: ListView.separated(
+              padding: EdgeInsets.only(
+                top: topPadding + 80, // 给标题按钮留空间
+                bottom: 120, // 给导航栏留空间
+                left: 16,
+                right: 16,
               ),
-            ),
-          ),
-          // 消息列表 - 使用 Stack 添加顶部渐变遮罩
-          Expanded(
-            child: Stack(
-              children: [
-                // 消息列表使用 ShaderMask 实现顶部渐变
-                ShaderMask(
-                  shaderCallback: (Rect bounds) {
-                    return const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.white, Colors.white],
-                      stops: [0.0, 0.08, 1.0], // 顶部 8% 渐变
-                    ).createShader(bounds);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(
-                      top: 20, // 增加顶部间距，给渐变留空间
-                      bottom: 100,
-                      left: 16,
-                      right: 16,
-                    ),
-                    itemCount: 10,
-                    separatorBuilder: (c, i) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final userName = 'User Name $index';
-                      final avatarUrl = 'https://i.pravatar.cc/150?img=$index';
+              itemCount: 10,
+              separatorBuilder: (c, i) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final userName = 'User Name $index';
+                final avatarUrl = 'https://i.pravatar.cc/150?img=$index';
 
-                      return GestureDetector(
-                        onTap: () {
-                          // Mock 未读消息数 - 实际应从数据库获取
-                          final unreadCount = (index * 7 + 3) % 50; // 模拟随机未读数
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatPage(
-                                userName: userName,
-                                avatarUrl: avatarUrl,
-                                unreadCount: unreadCount,
-                              ),
+                return GestureDetector(
+                  onTap: () {
+                    // Mock 未读消息数 - 实际应从数据库获取
+                    final unreadCount = (index * 7 + 3) % 50; // 模拟随机未读数
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatPage(
+                          userName: userName,
+                          avatarUrl: avatarUrl,
+                          unreadCount: unreadCount,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(40),
+                      border: Border.all(color: Colors.black12, width: 0.5),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 10),
+                        Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundImage: NetworkImage(avatarUrl),
                             ),
-                          );
-                        },
-                        child: Container(
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(40),
-                            border: Border.all(
-                              color: Colors.black12,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const SizedBox(width: 10),
-                              Stack(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 28,
-                                    backgroundImage: NetworkImage(avatarUrl),
+                            if (index < 3)
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
                                   ),
-                                  if (index < 3)
-                                    Positioned(
-                                      right: 0,
-                                      bottom: 0,
-                                      child: Container(
-                                        width: 14,
-                                        height: 14,
-                                        decoration: BoxDecoration(
-                                          color: Colors.green,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 2,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      userName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'This is a preview message content...',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ],
                                 ),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.only(right: 20),
-                                child: Text(
-                                  '12:00',
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 12,
-                                  ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                userName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'This is a preview message content...',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 13,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      );
-                    },
+                        Padding(
+                          padding: const EdgeInsets.only(right: 20),
+                          child: Text(
+                            '12:00',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // 固定的顶部标题按钮 - 不会被渐变遮挡
+          Positioned(
+            top: topPadding + 12,
+            left: 16,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(25),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(153), // 60% 不透明度
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(20),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Text(
+                    '消息',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24,
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ],

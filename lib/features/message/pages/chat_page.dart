@@ -95,8 +95,8 @@ class _ChatPageState extends State<ChatPage> {
             children: [
               const Icon(
                 Icons.arrow_back_ios_new,
-                color: Colors.blue,
-                size: 22,
+                color: Colors.black, // 与 profile_page 保持一致
+                size: 20,
               ),
               const SizedBox(width: 4),
               // 未读消息数角标 - 只在有未读消息时显示
