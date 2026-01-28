@@ -9,7 +9,7 @@ class MapBubbleWidget extends StatelessWidget {
   static const double expandedSize = 280.0;
   static const double expandedHeightFactor = 1.2;
   static const double expandedHeight = expandedSize * expandedHeightFactor;
-  static const double arrowHeight = 20.0;
+  static const double arrowHeight = 15.0;
 
   final bool isExpanded;
   final VoidCallback onTap;
@@ -89,7 +89,7 @@ class MapBubbleWidget extends StatelessWidget {
         : 'https://picsum.photos/300/300';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 35),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 22), // 底部减少以平衡上下空间
       child: Column(
         children: [
           Expanded(
@@ -108,36 +108,53 @@ class MapBubbleWidget extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          // Like and Favorite buttons on both sides
+          const SizedBox(height: 6), // 减少间距
+          // 底部：左边用户头像，右边 like 和 star 按钮
           Consumer<PostProvider>(
             builder: (context, postProvider, child) {
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Like button on left
-                    GestureDetector(
-                      onTap: () {
-                        postProvider.toggleLike(post.id);
-                      },
-                      child: Icon(
-                        post.isLiked ? Icons.favorite : Icons.favorite_border,
-                        size: 24,
-                        color: post.isLiked ? Colors.red : Colors.black54,
-                      ),
+                    // 左边：用户头像
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundImage: NetworkImage(post.user.avatarUrl),
+                      onBackgroundImageError: (_, __) {},
                     ),
-                    // Favorite button on right
-                    GestureDetector(
-                      onTap: () {
-                        postProvider.toggleFavorite(post.id);
-                      },
-                      child: Icon(
-                        post.isFavorited ? Icons.star : Icons.star_border,
-                        size: 24,
-                        color: post.isFavorited ? Colors.amber : Colors.black54,
-                      ),
+                    // 右边：like 和 star 按钮横向排列
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Like 按钮
+                        GestureDetector(
+                          onTap: () {
+                            postProvider.toggleLike(post.id);
+                          },
+                          child: Icon(
+                            post.isLiked
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            size: 22,
+                            color: post.isLiked ? Colors.red : Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Star 按钮
+                        GestureDetector(
+                          onTap: () {
+                            postProvider.toggleFavorite(post.id);
+                          },
+                          child: Icon(
+                            post.isFavorited ? Icons.star : Icons.star_border,
+                            size: 22,
+                            color: post.isFavorited
+                                ? Colors.amber
+                                : Colors.black54,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -198,9 +215,9 @@ Path _buildBubblePath(Size size, bool isExpanded) {
         Rect.fromCircle(center: Offset(w / 2, h / 2 - 5), radius: w / 2 - 5),
       );
     final arrow = Path()
-      ..moveTo(w / 2 - 8, h - 15)
+      ..moveTo(w / 2 - 8, h - MapBubbleWidget.arrowHeight)
       ..lineTo(w / 2, h)
-      ..lineTo(w / 2 + 8, h - 15)
+      ..lineTo(w / 2 + 8, h - MapBubbleWidget.arrowHeight)
       ..close();
     return Path.combine(PathOperation.union, circlePath, arrow);
   }

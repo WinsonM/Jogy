@@ -102,8 +102,12 @@ class _MapPageState extends State<MapPage> {
             distance < expansionThreshold && dy.abs() <= expandBand;
         if (isEligible) {
           if (i == _suppressedAutoIndex) {
+            // 这个气泡是被抑制的（用户刚收起它）
+            // 只标记它仍然符合条件，但不参与"最近气泡"的竞选
             suppressedStillEligible = true;
           } else if (distance < minDistance) {
+            // 这个气泡不被抑制，且比之前记录的更近
+            // 更新为新的候选者
             minDistance = distance;
             closestIndex = i;
           }
@@ -189,7 +193,7 @@ class _MapPageState extends State<MapPage> {
             FlutterMap(
               mapController: _mapController,
               options: MapOptions(
-                initialCenter: LatLng(
+                initialCenter: LatLng(//目前中心是第一个post，后续改为当前使用者的位置信息
                   posts[0].location.latitude,
                   posts[0].location.longitude,
                 ),
