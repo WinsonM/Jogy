@@ -365,36 +365,42 @@ class _MapPageState extends State<MapPage> {
                       onTap: () {
                         // TODO: 打开搜索页面
                       },
-                      child: Container(
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(22),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(153), // 60% 不透明度
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withAlpha(20),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.search,
-                              size: 22,
-                              color: Colors.grey[600],
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.search,
+                                  size: 22,
+                                  color: Colors.grey[600],
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '搜索',
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '搜索',
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 15,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -405,24 +411,29 @@ class _MapPageState extends State<MapPage> {
                     onTap: () {
                       // TODO: 打开消息页面
                     },
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
+                    child: ClipOval(
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(153), // 60% 不透明度
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(20),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.chat_bubble_outline,
-                        size: 22,
-                        color: Colors.grey[700],
+                          child: Icon(
+                            Icons.chat_bubble_outline,
+                            size: 22,
+                            color: Colors.grey[700],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -432,21 +443,30 @@ class _MapPageState extends State<MapPage> {
                     onTap: () {
                       // TODO: 打开发布页面
                     },
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
+                    child: ClipOval(
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(153), // 60% 不透明度
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(20),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
+                          child: Icon(
+                            Icons.add,
+                            size: 24,
+                            color: Colors.grey[700],
+                          ),
+                        ),
                       ),
-                      child: Icon(Icons.add, size: 24, color: Colors.grey[700]),
                     ),
                   ),
                 ],

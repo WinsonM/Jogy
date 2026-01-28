@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/post_model.dart';
@@ -45,10 +46,23 @@ class MapBubbleWidget extends StatelessWidget {
               alignment: Alignment.bottomCenter, // Align content from bottom
               clipBehavior: Clip.none,
               children: [
+                // 玻璃模糊效果层
+                ClipPath(
+                  clipper: BubbleClipper(isExpanded: isExpanded),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      width: baseSize,
+                      height: bubbleHeight,
+                      color: Colors.transparent,
+                    ),
+                  ),
+                ),
+                // 气泡颜色层
                 CustomPaint(
                   size: Size(baseSize, bubbleHeight),
                   painter: BubblePainter(
-                    color: const Color(0xFF3FAAF0), // 与 chat_page 聊天气泡颜色一致
+                    color: const Color(0x993FAAF0), // 0x99 = 60% 不透明度
                     isExpanded: isExpanded,
                   ),
                 ),

@@ -74,12 +74,15 @@ class MessagePage extends StatelessWidget {
 
                       return GestureDetector(
                         onTap: () {
+                          // Mock 未读消息数 - 实际应从数据库获取
+                          final unreadCount = (index * 7 + 3) % 50; // 模拟随机未读数
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => ChatPage(
                                 userName: userName,
                                 avatarUrl: avatarUrl,
+                                unreadCount: unreadCount,
                               ),
                             ),
                           );

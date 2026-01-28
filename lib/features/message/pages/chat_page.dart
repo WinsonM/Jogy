@@ -4,8 +4,14 @@ import '../../profile/pages/profile_page.dart';
 class ChatPage extends StatefulWidget {
   final String userName;
   final String avatarUrl;
+  final int unreadCount; // 未读消息数，从数据库获取
 
-  const ChatPage({super.key, required this.userName, required this.avatarUrl});
+  const ChatPage({
+    super.key,
+    required this.userName,
+    required this.avatarUrl,
+    this.unreadCount = 0, // 默认为 0
+  });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -93,17 +99,22 @@ class _ChatPageState extends State<ChatPage> {
                 size: 22,
               ),
               const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black, // Or dark grey? Image looks blackish
-                  borderRadius: BorderRadius.circular(12),
+              // 未读消息数角标 - 只在有未读消息时显示
+              if (widget.unreadCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    widget.unreadCount > 99 ? '99+' : '${widget.unreadCount}',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
                 ),
-                child: const Text(
-                  '23',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
             ],
           ),
         ),
