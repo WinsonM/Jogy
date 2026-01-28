@@ -193,7 +193,8 @@ class _MapPageState extends State<MapPage> {
             FlutterMap(
               mapController: _mapController,
               options: MapOptions(
-                initialCenter: LatLng(//目前中心是第一个post，后续改为当前使用者的位置信息
+                initialCenter: LatLng(
+                  //目前中心是第一个post，后续改为当前使用者的位置信息
                   posts[0].location.latitude,
                   posts[0].location.longitude,
                 ),
@@ -275,6 +276,106 @@ class _MapPageState extends State<MapPage> {
                   }).toList(),
                 ),
               ],
+            ),
+            // 顶部工具栏：搜索框 + 消息按钮 + 发布按钮
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              child: Row(
+                children: [
+                  // 搜索框 - 占据剩余空间
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        // TODO: 打开搜索页面
+                      },
+                      child: Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.search,
+                              size: 22,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '搜索',
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // 消息按钮
+                  GestureDetector(
+                    onTap: () {
+                      // TODO: 打开消息页面
+                    },
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.chat_bubble_outline,
+                        size: 22,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // 发布按钮
+                  GestureDetector(
+                    onTap: () {
+                      // TODO: 打开发布页面
+                    },
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(Icons.add, size: 24, color: Colors.grey[700]),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         );
