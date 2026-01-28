@@ -44,74 +44,65 @@ class GlassBottomNavBar extends StatelessWidget {
           alignment: Alignment.bottomCenter,
           child: Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(40),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(40),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
+            child: Container(
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(40),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Stack(
+                children: [
+                  // 滑动选中指示器背景
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    left: indicatorLeft,
+                    top: 0,
+                    bottom: 0,
+                    width: selectedItemWidth,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(32),
                       ),
-                    ],
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  child: Stack(
+                  // 导航项 Row - 使用透明背景
+                  Row(
                     children: [
-                      // 滑动选中指示器背景
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutCubic,
-                        left: indicatorLeft,
-                        top: 0,
-                        bottom: 0,
-                        width: selectedItemWidth,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(32),
-                          ),
-                        ),
+                      _buildNavItem(
+                        index: 0,
+                        icon: Icons.home,
+                        label: '主页',
+                        isSelected: currentIndex == 0,
+                        activeColor: activeColor,
                       ),
-                      // 导航项 Row - 使用透明背景
-                      Row(
-                        children: [
-                          _buildNavItem(
-                            index: 0,
-                            icon: Icons.home,
-                            label: '主页',
-                            isSelected: currentIndex == 0,
-                            activeColor: activeColor,
-                          ),
-                          _buildNavItem(
-                            index: 1,
-                            icon: Icons.chat_bubble,
-                            label: '消息',
-                            isSelected: currentIndex == 1,
-                            activeColor: activeColor,
-                          ),
-                          _buildNavItem(
-                            index: 2,
-                            icon: Icons.person,
-                            label: '我的',
-                            isSelected: currentIndex == 2,
-                            activeColor: activeColor,
-                          ),
-                        ],
+                      _buildNavItem(
+                        index: 1,
+                        icon: Icons.chat_bubble,
+                        label: '消息',
+                        isSelected: currentIndex == 1,
+                        activeColor: activeColor,
+                      ),
+                      _buildNavItem(
+                        index: 2,
+                        icon: Icons.person,
+                        label: '我的',
+                        isSelected: currentIndex == 2,
+                        activeColor: activeColor,
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
           ),
