@@ -551,6 +551,80 @@ class _MapPageState extends State<MapPage> {
                 ),
               ],
             ),
+            // 缩放控制按钮
+            Positioned(
+              right: 16,
+              bottom: MediaQuery.of(context).padding.bottom + 100,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(25),
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(153),
+                      borderRadius: BorderRadius.circular(25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(20),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 放大按钮
+                        GestureDetector(
+                          onTap: () {
+                            final currentZoom = _mapController.camera.zoom;
+                            _mapController.move(
+                              _mapController.camera.center,
+                              (currentZoom + 1).clamp(3.0, 18.0),
+                            );
+                          },
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: const BoxDecoration(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(25),
+                              ),
+                            ),
+                            child: const Icon(Icons.add, size: 24),
+                          ),
+                        ),
+                        Container(
+                          width: 24,
+                          height: 1,
+                          color: Colors.grey[300],
+                        ),
+                        // 缩小按钮
+                        GestureDetector(
+                          onTap: () {
+                            final currentZoom = _mapController.camera.zoom;
+                            _mapController.move(
+                              _mapController.camera.center,
+                              (currentZoom - 1).clamp(3.0, 18.0),
+                            );
+                          },
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: const BoxDecoration(
+                              borderRadius: BorderRadius.vertical(
+                                bottom: Radius.circular(25),
+                              ),
+                            ),
+                            child: const Icon(Icons.remove, size: 24),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             // 顶部工具栏：搜索框 + 消息按钮 + 发布按钮
             Positioned(
               top: MediaQuery.of(context).padding.top + 12,
