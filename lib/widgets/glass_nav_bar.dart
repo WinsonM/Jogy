@@ -27,18 +27,11 @@ class GlassBottomNavBar extends StatelessWidget {
         final double totalInnerWidth =
             constraints.maxWidth - 32 - containerPadding; // 32 = outer padding
 
-        // flex 比例: 选中项 2, 未选中项 1, 总共 = 2 + 1 + 1 = 4 (3个tab)
-        final double flexUnit = totalInnerWidth / 4;
-        final double selectedItemWidth = flexUnit * 2;
-        final double unselectedItemWidth = flexUnit * 1;
+        // flex 比例: 所有项相等, 总共 = 1 + 1 + 1 = 3 (3个tab)
+        final double itemWidth = totalInnerWidth / 3;
 
         // 计算选中指示器的位置
-        double indicatorLeft = 0;
-        for (int i = 0; i < currentIndex; i++) {
-          indicatorLeft += (i == currentIndex)
-              ? selectedItemWidth
-              : unselectedItemWidth;
-        }
+        double indicatorLeft = currentIndex * itemWidth;
 
         return Align(
           alignment: Alignment.bottomCenter,
@@ -74,7 +67,7 @@ class GlassBottomNavBar extends StatelessWidget {
                         left: indicatorLeft,
                         top: 0,
                         bottom: 0,
-                        width: selectedItemWidth,
+                        width: itemWidth,
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           decoration: BoxDecoration(
@@ -134,7 +127,7 @@ class GlassBottomNavBar extends StatelessWidget {
     final icon = isSelected ? filledIcon : outlinedIcon;
 
     return Expanded(
-      flex: isSelected ? 2 : 1,
+      flex: 1,
       child: GestureDetector(
         onTap: index >= 0 ? () => onTap(index) : onCustomTap,
         behavior: HitTestBehavior.opaque,
@@ -153,18 +146,8 @@ class GlassBottomNavBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 图标带弹性动画
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 1.0, end: isSelected ? 1.1 : 1.0),
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutBack,
-                builder: (context, scale, child) {
-                  return Transform.scale(
-                    scale: scale,
-                    child: Icon(icon, size: 24, color: itemColor),
-                  );
-                },
-              ),
+              // 图标
+              Icon(icon, size: 24, color: itemColor),
               const SizedBox(height: 2),
               Text(
                 label,
