@@ -4,6 +4,7 @@ import '../../widgets/glass_nav_bar.dart';
 // 引入两个主要页面
 import '../map/pages/map_page.dart';
 import '../message/pages/message_page.dart';
+import '../profile/pages/myprofile_page.dart';
 
 class HomeWrapper extends StatefulWidget {
   const HomeWrapper({super.key});
@@ -15,7 +16,7 @@ class HomeWrapper extends StatefulWidget {
 class _HomeWrapperState extends State<HomeWrapper> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [MapPage(), MessagePage()];
+  final List<Widget> _pages = const [MapPage(), MessagePage(), MyProfilePage()];
 
   @override
   Widget build(BuildContext context) {

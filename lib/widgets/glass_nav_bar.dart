@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 class GlassBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final VoidCallback? onMyTap;
 
   const GlassBottomNavBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
+    this.onMyTap,
   });
 
   @override
@@ -25,7 +27,7 @@ class GlassBottomNavBar extends StatelessWidget {
         final double totalInnerWidth =
             constraints.maxWidth - 32 - containerPadding; // 32 = outer padding
 
-        // flex 比例: 选中项 2, 未选中项 1, 总共 = 2 + 1 + 1 = 4
+        // flex 比例: 选中项 2, 未选中项 1, 总共 = 2 + 1 + 1 = 4 (3个tab)
         final double flexUnit = totalInnerWidth / 4;
         final double selectedItemWidth = flexUnit * 2;
         final double unselectedItemWidth = flexUnit * 1;
@@ -98,13 +100,13 @@ class GlassBottomNavBar extends StatelessWidget {
                             label: '消息',
                             isSelected: currentIndex == 1,
                           ),
-                          // "我的"按钮 - 点击时不切换页面，保持禁用状态
+                          // "我的"按钮
                           _buildNavItem(
-                            index: -1, // 使用 -1 表示不参与页面切换
+                            index: 2,
                             filledIcon: Icons.person,
                             outlinedIcon: Icons.person_outline,
                             label: '我的',
-                            isSelected: false, // 永远不选中
+                            isSelected: currentIndex == 2,
                           ),
                         ],
                       ),
@@ -125,6 +127,7 @@ class GlassBottomNavBar extends StatelessWidget {
     required IconData outlinedIcon,
     required String label,
     required bool isSelected,
+    VoidCallback? onCustomTap,
   }) {
     // 选中时用实心图标，未选中时用空心图标
     const itemColor = Colors.black;
@@ -133,7 +136,7 @@ class GlassBottomNavBar extends StatelessWidget {
     return Expanded(
       flex: isSelected ? 2 : 1,
       child: GestureDetector(
-        onTap: index >= 0 ? () => onTap(index) : null, // index < 0 时不响应点击
+        onTap: index >= 0 ? () => onTap(index) : onCustomTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
