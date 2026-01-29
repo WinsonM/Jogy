@@ -307,6 +307,17 @@ class _SettingsDrawer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 30),
+                // 浏览历史
+                _buildMenuItem(
+                  icon: Icons.history,
+                  title: '浏览历史',
+                  onTap: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('浏览历史功能即将推出')));
+                  },
+                ),
                 // 联系客服
                 _buildMenuItem(
                   icon: Icons.headset_mic_outlined,

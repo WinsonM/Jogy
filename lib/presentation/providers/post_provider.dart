@@ -87,4 +87,17 @@ class PostProvider extends ChangeNotifier {
       }
     }
   }
+
+  /// 搜索帖子 - 匹配内容、用户名、地点名称或地址
+  List<PostModel> searchPosts(String query) {
+    if (query.isEmpty) return [];
+    final lowerQuery = query.toLowerCase();
+    return _posts.where((post) {
+      return post.content.toLowerCase().contains(lowerQuery) ||
+          post.user.username.toLowerCase().contains(lowerQuery) ||
+          (post.location.placeName?.toLowerCase().contains(lowerQuery) ??
+              false) ||
+          (post.location.address?.toLowerCase().contains(lowerQuery) ?? false);
+    }).toList();
+  }
 }

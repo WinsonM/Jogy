@@ -9,7 +9,9 @@ import '../widgets/map_bubble.dart';
 import '../../detail/pages/detail_page.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../../config/map_config.dart';
+import '../../../data/models/post_model.dart';
 import '../../../data/datasources/mock_data_source.dart';
+import 'search_page.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -36,6 +38,8 @@ class _MapPageState extends State<MapPage> {
   // 用户位置相关
   LatLng? _userLocation;
   bool _locationLoading = true;
+
+  final GlobalKey _addButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -208,6 +212,193 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  Future<void> _navigateToSearch() async {
+    final result = await Navigator.push<PostModel>(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const SearchPage(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, -1.0); // 从顶部滑入
+          const end = Offset.zero;
+          const curve = Curves.easeOut;
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+      ),
+    );
+
+    if (result != null && mounted) {
+      // 找到对应的 index
+      final posts = context.read<PostProvider>().posts;
+      final index = posts.indexWhere((p) => p.id == result.id);
+
+      if (index != -1) {
+        // 定位到该帖子
+        setState(() {
+          _manualExpandedIndex = index;
+          _expandedIndex = index;
+          _suppressedAutoIndex = null;
+        });
+
+        final cameraSize = _mapController.camera.size;
+        _mapController.move(
+          LatLng(result.location.latitude, result.location.longitude),
+          16,
+          // Center the marker tip within the visible map area.
+          offset: _expandedBubbleCenterOffset(cameraSize),
+        );
+      }
+    }
+  }
+
+  void _showAddMenu() {
+    final RenderBox? renderBox =
+        _addButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final size = renderBox.size;
+    final position = renderBox.localToGlobal(Offset.zero);
+
+    // 菜单宽度
+    const menuWidth = 140.0;
+    // 菜单项高度
+
+    // 菜单总高度 (2项) + padding
+
+    // 计算菜单位置：按钮下方，右对齐
+    final top = position.dy + size.height + 8;
+    final right =
+        MediaQuery.of(context).size.width - (position.dx + size.width);
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Stack(
+          children: [
+            Positioned(
+              top: top,
+              right: right,
+              child: Material(
+                color: Colors.transparent,
+                child: ScaleTransition(
+                  scale: CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutBack,
+                  ),
+                  alignment: Alignment.topRight,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        width: menuWidth,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(153), // 60% 不透明度
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(20),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildMenuItem(
+                              icon: Icons.qr_code_scanner,
+                              label: '扫一扫',
+                              onTap: () {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('扫码功能即将推出')),
+                                );
+                              },
+                            ),
+                            const Divider(height: 1, indent: 16, endIndent: 16),
+                            _buildMenuItem(
+                              icon: Icons.qr_code,
+                              label: '我的二维码',
+                              onTap: () {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('二维码功能即将推出')),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+    );
+  }
+
+  void _openMessagePage() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: const _MessageSheetContent(),
+      ),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: Colors.black87),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 位置加载中显示加载指示器
@@ -362,9 +553,7 @@ class _MapPageState extends State<MapPage> {
                   // 搜索框 - 占据剩余空间
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        // TODO: 打开搜索页面
-                      },
+                      onTap: _navigateToSearch,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(22),
                         child: BackdropFilter(
@@ -408,9 +597,7 @@ class _MapPageState extends State<MapPage> {
                   const SizedBox(width: 10),
                   // 消息按钮
                   GestureDetector(
-                    onTap: () {
-                      // TODO: 打开消息页面
-                    },
+                    onTap: _openMessagePage,
                     child: ClipOval(
                       child: BackdropFilter(
                         filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -440,9 +627,8 @@ class _MapPageState extends State<MapPage> {
                   const SizedBox(width: 10),
                   // 发布按钮
                   GestureDetector(
-                    onTap: () {
-                      // TODO: 打开发布页面
-                    },
+                    key: _addButtonKey,
+                    onTap: _showAddMenu,
                     child: ClipOval(
                       child: BackdropFilter(
                         filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -540,4 +726,162 @@ class _UserBubblePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// 消息发布界面内容
+class _MessageSheetContent extends StatefulWidget {
+  const _MessageSheetContent();
+
+  @override
+  State<_MessageSheetContent> createState() => _MessageSheetContentState();
+}
+
+class _MessageSheetContentState extends State<_MessageSheetContent> {
+  bool _isImageMode = true; // true = 图片模式, false = 文字模式
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header: X button + 图片/文字 toggle
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              // Close button (left)
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, size: 20),
+                ),
+              ),
+              // Segmented control (图片/文字) - centered
+              Expanded(
+                child: Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildToggleButton('图片', _isImageMode, () {
+                          setState(() => _isImageMode = true);
+                        }),
+                        _buildToggleButton('文字', !_isImageMode, () {
+                          setState(() => _isImageMode = false);
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Publish button (right)
+              GestureDetector(
+                onTap: () {
+                  // TODO: Implement publish logic
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('发布功能即将推出')));
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF3FAAF0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_upward,
+                    size: 20,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Content area
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Image picker (only when 图片 mode)
+                if (_isImageMode) ...[
+                  GestureDetector(
+                    onTap: () {
+                      // TODO: Implement image picker
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('图片选择功能即将推出')),
+                      );
+                    },
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: Icon(Icons.add, size: 40, color: Colors.grey[400]),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                // Text input
+                TextField(
+                  maxLines: null,
+                  decoration: InputDecoration(
+                    hintText: '请输入文字...',
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToggleButton(String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(20),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            color: Colors.black87,
+          ),
+        ),
+      ),
+    );
+  }
 }
