@@ -112,7 +112,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildStatItem('$_postsCount', '帖子'),
+                    _buildStatItem('$_postsCount', '发布'),
                     Container(
                       height: 30,
                       width: 1,
@@ -169,7 +169,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
                       // Tab 项
                       Row(
                         children: [
-                          _buildTabItem('足迹', 0),
+                          _buildTabItem('发布', 0),
                           _buildTabItem('喜欢', 1),
                           _buildTabItem('收藏', 2),
                         ],

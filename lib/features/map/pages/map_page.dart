@@ -31,6 +31,7 @@ class _MapPageState extends State<MapPage> {
   int? _expandedIndex; // Currently expanded bubble (auto or manual)
   int? _manualExpandedIndex; // Track user manual click
   int? _suppressedAutoIndex; // Prevent immediate auto re-expand after collapse
+  bool _autoExpandDisabled = false; // Disable auto-expand until user drags
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -190,13 +191,13 @@ class _MapPageState extends State<MapPage> {
       }
 
       // Auto-expand logic
-      if (_manualExpandedIndex == null) {
-        // No manual selection - use auto-expand
+      if (_manualExpandedIndex == null && !_autoExpandDisabled) {
+        // No manual selection and auto-expand is enabled - use auto-expand
         if (closestIndex != _expandedIndex) {
           _expandedIndex = closestIndex;
           needsRebuild = true;
         }
-      } else {
+      } else if (_manualExpandedIndex != null) {
         // Keep manual selection
         if (_expandedIndex != _manualExpandedIndex) {
           _expandedIndex = _manualExpandedIndex;
@@ -452,20 +453,26 @@ class _MapPageState extends State<MapPage> {
                 initialCenter: mapCenter,
                 initialZoom: 15.0,
                 onTap: (_, __) {
-                  // Clear manual selection - restore auto-expand mode
+                  // Clear manual selection and disable auto-expand
                   final collapsedIndex = _expandedIndex;
                   setState(() {
                     _manualExpandedIndex = null;
                     _expandedIndex = null;
                     _suppressedAutoIndex = collapsedIndex;
+                    _autoExpandDisabled =
+                        true; // Disable auto-expand until drag
                   });
                 },
                 onMapEvent: (event) {
-                  // When user drags the map, clear manual selection to restore auto-expand mode
+                  // When user drags the map, clear manual selection and re-enable auto-expand
                   if (event is MapEventMove &&
                       event.source == MapEventSource.onDrag) {
                     if (_manualExpandedIndex != null) {
                       _manualExpandedIndex = null;
+                    }
+                    // Re-enable auto-expand when user starts dragging
+                    if (_autoExpandDisabled) {
+                      _autoExpandDisabled = false;
                     }
                   }
                   // Update scale factors when map moves
