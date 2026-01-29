@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -745,6 +746,21 @@ class _MessageSheetContent extends StatefulWidget {
 
 class _MessageSheetContentState extends State<_MessageSheetContent> {
   bool _isImageMode = true; // true = 图片模式, false = 文字模式
+  String _selectedDuration = '永久'; // 留存时长
+  bool _showPickerWheel = false; // 是否显示滚轮选择器
+
+  static const List<String> _durationOptions = [
+    '30分钟',
+    '1个小时',
+    '10小时',
+    '1天',
+    '永久',
+  ];
+
+  // Toggle button width for animation calculation
+  static const double _toggleButtonWidth = 60.0;
+  static const double _toggleButtonHeight = 36.0;
+  static const double _toggleButtonPadding = 4.0;
 
   @override
   Widget build(BuildContext context) {
@@ -768,23 +784,48 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
                   child: const Icon(Icons.close, size: 20),
                 ),
               ),
-              // Segmented control (图片/文字) - centered
+              // Segmented control (图片/文字) - centered with bubble flow animation
               Expanded(
                 child: Center(
                   child: Container(
+                    height: _toggleButtonHeight + _toggleButtonPadding * 2,
+                    width: _toggleButtonWidth * 2 + _toggleButtonPadding * 2,
                     decoration: BoxDecoration(
                       color: Colors.grey[200],
                       borderRadius: BorderRadius.circular(25),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    padding: const EdgeInsets.all(_toggleButtonPadding),
+                    child: Stack(
                       children: [
-                        _buildToggleButton('图片', _isImageMode, () {
-                          setState(() => _isImageMode = true);
-                        }),
-                        _buildToggleButton('文字', !_isImageMode, () {
-                          setState(() => _isImageMode = false);
-                        }),
+                        // Animated bubble indicator
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                          left: _isImageMode ? 0 : _toggleButtonWidth,
+                          top: 0,
+                          bottom: 0,
+                          width: _toggleButtonWidth,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withAlpha(20),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Toggle buttons row
+                        Row(
+                          children: [
+                            _buildToggleItem('图片', true),
+                            _buildToggleItem('文字', false),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -854,6 +895,131 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
                   ),
                   style: const TextStyle(fontSize: 16),
                 ),
+                // Retention duration selector (only in text mode)
+                if (!_isImageMode) ...[
+                  const SizedBox(height: 24),
+                  // Glass bubble label - tappable
+                  GestureDetector(
+                    onTap: () {
+                      setState(() => _showPickerWheel = !_showPickerWheel);
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(153),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(20),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                '留存时长',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _selectedDuration,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF3FAAF0),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              AnimatedRotation(
+                                duration: const Duration(milliseconds: 200),
+                                turns: _showPickerWheel ? 0.5 : 0,
+                                child: Icon(
+                                  Icons.keyboard_arrow_down,
+                                  size: 18,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Animated wheel picker
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    child: _showPickerWheel
+                        ? Column(
+                            children: [
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                height: 120,
+                                child: CupertinoPicker(
+                                  scrollController: FixedExtentScrollController(
+                                    initialItem: _durationOptions.indexOf(
+                                      _selectedDuration,
+                                    ),
+                                  ),
+                                  itemExtent: 36,
+                                  onSelectedItemChanged: (index) {
+                                    setState(
+                                      () => _selectedDuration =
+                                          _durationOptions[index],
+                                    );
+                                  },
+                                  children: _durationOptions.map((option) {
+                                    return Center(
+                                      child: Text(
+                                        option,
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              // Confirm button
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() => _showPickerWheel = false);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF3FAAF0),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Text(
+                                    '确定',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
               ],
             ),
           ),
@@ -862,30 +1028,25 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
     );
   }
 
-  Widget _buildToggleButton(String label, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(20),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            color: Colors.black87,
+  Widget _buildToggleItem(String label, bool isImageModeValue) {
+    return SizedBox(
+      width: _toggleButtonWidth,
+      height: _toggleButtonHeight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          setState(() => _isImageMode = isImageModeValue);
+        },
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: (_isImageMode == isImageModeValue)
+                  ? FontWeight.w600
+                  : FontWeight.normal,
+              color: Colors.black87,
+            ),
           ),
         ),
       ),
