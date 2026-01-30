@@ -33,6 +33,7 @@ class _MapPageState extends State<MapPage> {
   int? _manualExpandedIndex; // Track user manual click
   int? _suppressedAutoIndex; // Prevent immediate auto re-expand after collapse
   bool _autoExpandDisabled = false; // Disable auto-expand until user drags
+  double _mapRotation = 0.0; // 地图旋转角度（弧度）
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -134,7 +135,6 @@ class _MapPageState extends State<MapPage> {
 
       final maxDistance =
           math.sqrt(mapSize.x * mapSize.x + mapSize.y * mapSize.y) / 2;
-      final expandBand = MapBubbleWidget.collapsedSize;
       bool needsRebuild = false;
       bool suppressedStillEligible = false;
 
@@ -159,8 +159,8 @@ class _MapPageState extends State<MapPage> {
         final distance = math.sqrt(dx * dx + dy * dy);
 
         // Track closest bubble within threshold
-        final isEligible =
-            distance < expansionThreshold && dy.abs() <= expandBand;
+        // 使用纯距离判断,不依赖 dy 带状检查,以支持地图旋转
+        final isEligible = distance < expansionThreshold;
         if (isEligible) {
           if (i == _suppressedAutoIndex) {
             // 这个气泡是被抑制的（用户刚收起它）
@@ -476,6 +476,12 @@ class _MapPageState extends State<MapPage> {
                       _autoExpandDisabled = false;
                     }
                   }
+                  // 更新地图旋转角度
+                  final newRotation =
+                      event.camera.rotation * (3.14159265359 / 180);
+                  if (_mapRotation != newRotation) {
+                    setState(() => _mapRotation = newRotation);
+                  }
                   // Update scale factors when map moves
                   _updateScaleFactors(event.camera);
                 },
@@ -494,7 +500,7 @@ class _MapPageState extends State<MapPage> {
                         width: MapBubbleWidget.collapsedSize,
                         height: MapBubbleWidget.collapsedSize,
                         alignment: Alignment.bottomCenter,
-                        child: const _UserLocationMarker(),
+                        child: _UserLocationMarker(mapRotation: _mapRotation),
                       ),
                     ],
                   ),
@@ -518,6 +524,7 @@ class _MapPageState extends State<MapPage> {
                         isExpanded: isExpanded,
                         scaleFactor: scaleFactor,
                         post: post,
+                        mapRotation: _mapRotation,
                         onTap: () {
                           if (isExpanded) {
                             Navigator.push(
@@ -749,17 +756,23 @@ class _MapPageState extends State<MapPage> {
 
 // 用户位置标记 - 使用与气泡缩小时相同的样式，颜色为橙色
 class _UserLocationMarker extends StatelessWidget {
-  const _UserLocationMarker();
+  final double mapRotation;
+
+  const _UserLocationMarker({this.mapRotation = 0.0});
 
   @override
   Widget build(BuildContext context) {
     const double size = MapBubbleWidget.collapsedSize;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        size: Size(size, size),
-        painter: _UserBubblePainter(color: Colors.orange),
+    return Transform.rotate(
+      angle: -mapRotation, // 反向旋转保持垂直
+      alignment: Alignment.bottomCenter, // 以底部尖端为中心
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          size: Size(size, size),
+          painter: _UserBubblePainter(color: Colors.orange),
+        ),
       ),
     );
   }

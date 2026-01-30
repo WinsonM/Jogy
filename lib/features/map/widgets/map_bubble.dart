@@ -16,6 +16,7 @@ class MapBubbleWidget extends StatelessWidget {
   final VoidCallback onTap;
   final double scaleFactor;
   final PostModel post;
+  final double mapRotation; // 地图旋转角度（弧度）
 
   const MapBubbleWidget({
     super.key,
@@ -23,6 +24,7 @@ class MapBubbleWidget extends StatelessWidget {
     required this.onTap,
     this.scaleFactor = 1.0,
     required this.post,
+    this.mapRotation = 0.0,
   });
 
   @override
@@ -34,48 +36,52 @@ class MapBubbleWidget extends StatelessWidget {
       onTap: onTap,
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: Transform.scale(
-          scale: scaleFactor,
-          alignment: Alignment.bottomCenter, // Scale from bottom tip
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.elasticOut,
-            width: baseSize,
-            height: bubbleHeight,
-            child: Stack(
-              alignment: Alignment.bottomCenter, // Align content from bottom
-              clipBehavior: Clip.none,
-              children: [
-                // 玻璃模糊效果层
-                ClipPath(
-                  clipper: BubbleClipper(isExpanded: isExpanded),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      width: baseSize,
-                      height: bubbleHeight,
-                      color: Colors.transparent,
-                    ),
-                  ),
-                ),
-                // 气泡颜色层
-                CustomPaint(
-                  size: Size(baseSize, bubbleHeight),
-                  painter: BubblePainter(
-                    color: const Color(0x993FAAF0), // 0x99 = 60% 不透明度
-                    isExpanded: isExpanded,
-                  ),
-                ),
-                if (scaleFactor >= 0.5)
+        child: Transform.rotate(
+          angle: -mapRotation, // 反向旋转以保持气泡垂直
+          alignment: Alignment.bottomCenter, // 以底部尖端为中心旋转
+          child: Transform.scale(
+            scale: scaleFactor,
+            alignment: Alignment.bottomCenter, // Scale from bottom tip
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.elasticOut,
+              width: baseSize,
+              height: bubbleHeight,
+              child: Stack(
+                alignment: Alignment.bottomCenter, // Align content from bottom
+                clipBehavior: Clip.none,
+                children: [
+                  // 玻璃模糊效果层
                   ClipPath(
                     clipper: BubbleClipper(isExpanded: isExpanded),
-                    child: SizedBox.expand(
-                      child: isExpanded
-                          ? _buildExpandedContent(context)
-                          : _buildCollapsedContent(),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        width: baseSize,
+                        height: bubbleHeight,
+                        color: Colors.transparent,
+                      ),
                     ),
                   ),
-              ],
+                  // 气泡颜色层
+                  CustomPaint(
+                    size: Size(baseSize, bubbleHeight),
+                    painter: BubblePainter(
+                      color: const Color(0x993FAAF0), // 0x99 = 60% 不透明度
+                      isExpanded: isExpanded,
+                    ),
+                  ),
+                  if (scaleFactor >= 0.5)
+                    ClipPath(
+                      clipper: BubbleClipper(isExpanded: isExpanded),
+                      child: SizedBox.expand(
+                        child: isExpanded
+                            ? _buildExpandedContent(context)
+                            : _buildCollapsedContent(),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
