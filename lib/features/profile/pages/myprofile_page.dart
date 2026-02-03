@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../auth/pages/login_page.dart';
 
 class MyProfilePage extends StatefulWidget {
   const MyProfilePage({super.key});
@@ -339,10 +340,12 @@ class _SettingsDrawer extends StatelessWidget {
                       filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                       child: GestureDetector(
                         onTap: () {
-                          Navigator.pop(context);
-                          // TODO: 执行退出登录逻辑
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('退出登录功能即将推出')),
+                          // 导航到登录页并清除所有历史路由
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (_) => const LoginPage(),
+                            ),
+                            (route) => false,
                           );
                         },
                         child: Container(
