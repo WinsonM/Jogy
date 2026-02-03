@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 
 import '../widgets/grid_bubble_background.dart';
+import '../../home/home_wrapper.dart';
 
 /// 认证页面状态
 enum AuthMode {
@@ -146,6 +147,13 @@ class _LoginPageState extends State<LoginPage>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('登录成功！')));
+
+    // 登录成功后导航到主页 (HomeWrapper 默认显示 MapPage)
+    if (mounted) {
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeWrapper()));
+    }
   }
 
   void _handleRegister() async {
