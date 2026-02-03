@@ -46,6 +46,7 @@ class _ChatPageState extends State<ChatPage> {
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               itemCount: _messages.length + 1, // +1 for timestamp
               itemBuilder: (context, index) {
@@ -251,6 +252,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   void _sendMessage(String text) {
     if (text.trim().isEmpty) return;
@@ -258,11 +260,23 @@ class _ChatPageState extends State<ChatPage> {
       _messages.add({'isMe': true, 'type': 'text', 'content': text.trim()});
       _controller.clear();
     });
+
+    // Auto scroll to bottom
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -299,8 +313,6 @@ class _ChatPageState extends State<ChatPage> {
                   textInputAction: TextInputAction.send,
                   onSubmitted: _sendMessage,
                   decoration: const InputDecoration(
-                    hintText: 'iMessage信息',
-                    hintStyle: TextStyle(color: Colors.grey, fontSize: 16),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.only(bottom: 10),
                   ),
