@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 
-import '../widgets/bubble_background.dart';
-import '../widgets/bubble_field.dart';
+import '../widgets/grid_bubble_background.dart';
 
 /// 认证页面状态
 enum AuthMode {
@@ -54,8 +53,6 @@ class _LoginPageState extends State<LoginPage>
     6,
     (_) => FocusNode(),
   );
-
-  final _bubbleBackgroundKey = GlobalKey<BubbleBackgroundState>();
 
   bool _isFocused = false;
   bool _isLoading = false;
@@ -128,19 +125,16 @@ class _LoginPageState extends State<LoginPage>
   }
 
   void _switchToRegister() {
-    _bubbleBackgroundKey.currentState?.triggerBurst();
     setState(() => _authMode = AuthMode.register);
   }
 
   void _switchToLogin() {
-    _bubbleBackgroundKey.currentState?.triggerBurst();
     setState(() => _authMode = AuthMode.login);
   }
 
   void _handleLogin() async {
     if (!_loginFormKey.currentState!.validate()) return;
 
-    _bubbleBackgroundKey.currentState?.triggerBurst();
     setState(() => _isLoading = true);
 
     await Future.delayed(const Duration(seconds: 2));
@@ -157,7 +151,6 @@ class _LoginPageState extends State<LoginPage>
   void _handleRegister() async {
     if (!_registerFormKey.currentState!.validate()) return;
 
-    _bubbleBackgroundKey.currentState?.triggerBurst();
     setState(() => _isLoading = true);
 
     await Future.delayed(const Duration(seconds: 1));
@@ -184,7 +177,6 @@ class _LoginPageState extends State<LoginPage>
       return;
     }
 
-    _bubbleBackgroundKey.currentState?.triggerBurst();
     setState(() => _isLoading = true);
 
     await Future.delayed(const Duration(seconds: 2));
@@ -227,23 +219,15 @@ class _LoginPageState extends State<LoginPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: BubbleBackground(
-        key: _bubbleBackgroundKey,
+      body: GridBubbleBackground(
         isFocused: _isFocused,
-        maxParticles: 60,
-        spawnRate: 3.0,
-        minRadius: 8.0,
-        maxRadius: 42.0,
-        baseSpeed: 50.0,
-        speedJitter: 15.0,
-        lifespanMin: 3.0,
-        lifespanMax: 6.0,
-        direction: const Offset(-0.7, -0.7),
-        sourcePoint: const Offset(0.92, 0.90),
-        enableBlurOverlay: true,
-        overlayOpacity: 0.25,
-        quality: BubbleQuality.medium,
-        gradientColors: const [Color(0xFF1a1a2e), Color(0xFF16213e)],
+        columns: 7,
+        baseRadius: 18.0,
+        maxScale: 1.8,
+        waveDuration: 2.5,
+        driftAmplitude: 8.0,
+        bubbleColor: const Color(0xFF5B9BD5),
+        backgroundColor: const Color(0xFFF5F5F7),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -257,36 +241,51 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Widget _buildAuthCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(25),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withAlpha(51), width: 1),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(20),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
-          child: AnimatedSwitcher(
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.1, 0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
-              );
-            },
-            child: _buildCurrentForm(),
+            curve: Curves.easeInOut,
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(160),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withAlpha(100),
+                width: 1.5,
+              ),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.1, 0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: _buildCurrentForm(),
+            ),
           ),
         ),
       ),
@@ -305,6 +304,10 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Widget _buildLoginForm() {
+    const primaryColor = Color(0xFF5B9BD5);
+    const textColor = Color(0xFF1a1a2e);
+    final subtitleColor = Colors.grey.shade600;
+
     return Form(
       key: _loginFormKey,
       child: Column(
@@ -312,7 +315,7 @@ class _LoginPageState extends State<LoginPage>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.bubble_chart_rounded, size: 64, color: Colors.white),
+          const Icon(Icons.bubble_chart_rounded, size: 64, color: primaryColor),
           const SizedBox(height: 16),
           const Text(
             '欢迎回来',
@@ -320,14 +323,14 @@ class _LoginPageState extends State<LoginPage>
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '登录以继续',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.white.withAlpha(179)),
+            style: TextStyle(fontSize: 16, color: subtitleColor),
           ),
           const SizedBox(height: 32),
 
@@ -350,7 +353,7 @@ class _LoginPageState extends State<LoginPage>
             suffixIcon: IconButton(
               icon: Icon(
                 _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                color: Colors.white54,
+                color: Colors.grey.shade500,
               ),
               onPressed: () =>
                   setState(() => _obscurePassword = !_obscurePassword),
@@ -369,16 +372,13 @@ class _LoginPageState extends State<LoginPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                '还没有账号？',
-                style: TextStyle(color: Colors.white.withAlpha(179)),
-              ),
+              Text('还没有账号？', style: TextStyle(color: subtitleColor)),
               TextButton(
                 onPressed: _switchToRegister,
                 child: const Text(
                   '立即注册',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: primaryColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -391,6 +391,10 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Widget _buildRegisterForm() {
+    const primaryColor = Color(0xFF5B9BD5);
+    const textColor = Color(0xFF1a1a2e);
+    final subtitleColor = Colors.grey.shade600;
+
     return Form(
       key: _registerFormKey,
       child: Column(
@@ -403,14 +407,14 @@ class _LoginPageState extends State<LoginPage>
             alignment: Alignment.centerLeft,
             child: IconButton(
               onPressed: _switchToLogin,
-              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+              icon: Icon(Icons.arrow_back_ios, color: Colors.grey.shade600),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
           ),
           const SizedBox(height: 8),
 
-          const Icon(Icons.person_add_rounded, size: 64, color: Colors.white),
+          const Icon(Icons.person_add_rounded, size: 64, color: primaryColor),
           const SizedBox(height: 16),
           const Text(
             '创建账号',
@@ -418,16 +422,15 @@ class _LoginPageState extends State<LoginPage>
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '填写信息完成注册',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.white.withAlpha(179)),
+            style: TextStyle(fontSize: 16, color: subtitleColor),
           ),
-          const SizedBox(height: 24),
 
           // 昵称
           _buildTextField(
@@ -468,7 +471,7 @@ class _LoginPageState extends State<LoginPage>
             suffixIcon: IconButton(
               icon: Icon(
                 _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                color: Colors.white54,
+                color: Colors.grey.shade500,
               ),
               onPressed: () =>
                   setState(() => _obscurePassword = !_obscurePassword),
@@ -493,7 +496,7 @@ class _LoginPageState extends State<LoginPage>
                 _obscureConfirmPassword
                     ? Icons.visibility_off
                     : Icons.visibility,
-                color: Colors.white54,
+                color: Colors.grey.shade500,
               ),
               onPressed: () => setState(
                 () => _obscureConfirmPassword = !_obscureConfirmPassword,
@@ -513,16 +516,13 @@ class _LoginPageState extends State<LoginPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                '已有账号？',
-                style: TextStyle(color: Colors.white.withAlpha(179)),
-              ),
+              Text('已有账号？', style: TextStyle(color: subtitleColor)),
               TextButton(
                 onPressed: _switchToLogin,
                 child: const Text(
                   '立即登录',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: primaryColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -535,6 +535,10 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Widget _buildVerificationForm() {
+    const primaryColor = Color(0xFF5B9BD5);
+    const textColor = Color(0xFF1a1a2e);
+    final subtitleColor = Colors.grey.shade600;
+
     return Form(
       key: _verificationFormKey,
       child: Column(
@@ -547,7 +551,7 @@ class _LoginPageState extends State<LoginPage>
             alignment: Alignment.centerLeft,
             child: IconButton(
               onPressed: () => setState(() => _authMode = AuthMode.register),
-              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+              icon: Icon(Icons.arrow_back_ios, color: Colors.grey.shade600),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
@@ -557,7 +561,7 @@ class _LoginPageState extends State<LoginPage>
           const Icon(
             Icons.mark_email_read_outlined,
             size: 64,
-            color: Colors.white,
+            color: primaryColor,
           ),
           const SizedBox(height: 16),
           const Text(
@@ -566,14 +570,14 @@ class _LoginPageState extends State<LoginPage>
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '验证码已发送至 $_registeredEmail',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.white.withAlpha(179)),
+            style: TextStyle(fontSize: 14, color: subtitleColor),
           ),
           const SizedBox(height: 32),
 
@@ -591,10 +595,7 @@ class _LoginPageState extends State<LoginPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                '没有收到？',
-                style: TextStyle(color: Colors.white.withAlpha(179)),
-              ),
+              Text('没有收到？', style: TextStyle(color: subtitleColor)),
               TextButton(
                 onPressed: () {
                   ScaffoldMessenger.of(
@@ -604,7 +605,7 @@ class _LoginPageState extends State<LoginPage>
                 child: const Text(
                   '重新发送',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: primaryColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -617,6 +618,7 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Widget _buildVerificationBox(int index) {
+    const primaryColor = Color(0xFF5B9BD5);
     return SizedBox(
       width: 45,
       height: 55,
@@ -630,25 +632,25 @@ class _LoginPageState extends State<LoginPage>
           keyboardType: TextInputType.number,
           maxLength: 1,
           style: const TextStyle(
-            color: Colors.white,
+            color: Color(0xFF1a1a2e),
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
           decoration: InputDecoration(
             counterText: '',
             filled: true,
-            fillColor: Colors.white.withAlpha(25),
+            fillColor: Colors.grey.shade100,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.white.withAlpha(51)),
+              borderSide: BorderSide(color: Colors.grey.shade300),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.white, width: 2),
+              borderSide: const BorderSide(color: primaryColor, width: 2),
             ),
           ),
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -668,31 +670,32 @@ class _LoginPageState extends State<LoginPage>
     Widget? suffixIcon,
     String? Function(String?)? validator,
   }) {
+    const primaryColor = Color(0xFF5B9BD5);
     return TextFormField(
       controller: controller,
       focusNode: focusNode,
       keyboardType: keyboardType,
       obscureText: obscureText,
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: Color(0xFF1a1a2e)),
       validator: validator,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(color: Colors.white.withAlpha(128)),
-        prefixIcon: Icon(prefixIcon, color: Colors.white54),
+        hintStyle: TextStyle(color: Colors.grey.shade400),
+        prefixIcon: Icon(prefixIcon, color: Colors.grey.shade500),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: Colors.white.withAlpha(25),
+        fillColor: Colors.grey.shade100,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withAlpha(51)),
+          borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white, width: 1.5),
+          borderSide: const BorderSide(color: primaryColor, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -712,15 +715,16 @@ class _LoginPageState extends State<LoginPage>
     bool isLoading,
     VoidCallback onPressed,
   ) {
+    const primaryColor = Color(0xFF5B9BD5);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       height: 56,
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: const Color(0xFF1a1a2e),
-          disabledBackgroundColor: Colors.white54,
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: primaryColor.withAlpha(128),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -732,7 +736,7 @@ class _LoginPageState extends State<LoginPage>
                 height: 24,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation(Color(0xFF1a1a2e)),
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
                 ),
               )
             : Text(
