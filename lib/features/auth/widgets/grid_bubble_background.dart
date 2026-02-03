@@ -142,30 +142,28 @@ class _GridBubblePainter extends CustomPainter {
     // 2. 根据高度动态计算需要的行数 (向上取整以覆盖全屏)
     final rows = (size.height / cellSize).ceil();
 
-    // 3. 计算垂直方向的居中偏移 (如果不需要严格切齐，可以让它从顶部由于 float 而略微偏移，或者居中)
-    // 这里我们选择简单居中，或者直接从(0,0)开始铺满
-    // 为了美观，我们加一点点垂直偏移让第一行不完全贴边
+    // 3. 计算垂直方向的居中偏移
     final verticalOffset = (size.height - rows * cellSize) / 2;
 
     // 为了防止碰撞，最大半径不能超过格子大小的一半
     final maxAllowedRadius = cellSize / 2.0;
 
     // 对角线最大距离 (用于计算波浪相位)
-    // 仍然使用逻辑上的 Grid 坐标
     final maxDiagonal = (rows - 1) + (columns - 1).toDouble();
 
     // 每一帧的时间因子 (0 ~ 2pi)
     final time = progress * 2 * math.pi;
 
-    for (int row = 0; row < rows; row++) {
-      for (int col = 0; col < columns; col++) {
+    // 循环范围扩大，防止从边缘漂移时出现空隙
+    // 从 -1 到 count (实际上是 count + 1 行/列)
+    for (int row = -1; row <= rows; row++) {
+      for (int col = -1; col <= columns; col++) {
         // 气泡基础中心位置 (网格中心)
         final gridCenterX = cellSize * (col + 0.5);
         final gridCenterY = verticalOffset + cellSize * (row + 0.5);
 
         // --- 漂移逻辑 (Drifting) ---
         // 使用 row/col 作为相位差，让每个点漂移轨迹不同
-        // sin/cos 组合让它画圈或做李萨如曲线
         final driftX = math.sin(time + row * 0.5 + col * 0.3) * driftAmplitude;
         final driftY = math.cos(time + row * 0.3 + col * 0.5) * driftAmplitude;
 
@@ -173,9 +171,12 @@ class _GridBubblePainter extends CustomPainter {
         final centerY = gridCenterY + driftY;
 
         // --- 波浪逻辑 ---
-        // 计算从右下角到左上角的对角线距离
+        // 归一化距离计算需要考虑负索引，取绝对值以获得对称波浪或简单的 clamp
+        // 这里为了保持波浪方向的一致性，仍然使用原始坐标逻辑，但限制范围
+        final effectiveRow = row.clamp(0, rows - 1);
+        final effectiveCol = col.clamp(0, columns - 1);
         final diagonalDistance =
-            (rows - 1 - row) + (columns - 1 - col).toDouble();
+            (rows - 1 - effectiveRow) + (columns - 1 - effectiveCol).toDouble();
         final normalizedDistance = diagonalDistance / maxDiagonal;
 
         // 计算该气泡的相位偏移

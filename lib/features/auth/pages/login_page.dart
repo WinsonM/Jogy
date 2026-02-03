@@ -259,7 +259,8 @@ class _LoginPageState extends State<LoginPage>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            padding: const EdgeInsets.all(32),
+            width:
+                double.infinity, // Ensure container takes full width constraint
             decoration: BoxDecoration(
               color: Colors.white.withAlpha(160),
               borderRadius: BorderRadius.circular(24),
@@ -268,23 +269,39 @@ class _LoginPageState extends State<LoginPage>
                 width: 1.5,
               ),
             ),
-            child: AnimatedSwitcher(
+            child: AnimatedSize(
               duration: const Duration(milliseconds: 300),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0.1, 0),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                );
-              },
-              child: _buildCurrentForm(),
+              curve: Curves.easeInOut,
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.1, 0),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    );
+                  },
+                  layoutBuilder: (currentChild, previousChildren) {
+                    return Stack(
+                      alignment: Alignment.topCenter,
+                      children: <Widget>[
+                        ...previousChildren,
+                        if (currentChild != null) currentChild,
+                      ],
+                    );
+                  },
+                  child: _buildCurrentForm(),
+                ),
+              ),
             ),
           ),
         ),
@@ -640,6 +657,8 @@ class _LoginPageState extends State<LoginPage>
             counterText: '',
             filled: true,
             fillColor: Colors.grey.shade100,
+            contentPadding:
+                EdgeInsets.zero, // Remove default padding to center vertically
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
