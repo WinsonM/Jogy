@@ -2,8 +2,11 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../widgets/map_bubble.dart';
@@ -339,9 +342,7 @@ class _MapPageState extends State<MapPage> {
                               label: '我的二维码',
                               onTap: () {
                                 Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('二维码功能即将推出')),
-                                );
+                                _showQRCodeDialog(context);
                               },
                             ),
                           ],
@@ -756,6 +757,141 @@ class _MapPageState extends State<MapPage> {
       },
     );
   }
+
+  void _showQRCodeDialog(BuildContext context) {
+    final GlobalKey qrKey = GlobalKey();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RepaintBoundary(
+                  key: qrKey,
+                  child: Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircleAvatar(
+                          radius: 40,
+                          backgroundImage: NetworkImage(
+                            'https://i.pravatar.cc/150?img=11',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'WinsonM',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Scan to view profile',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        QrImageView(
+                          data: 'jogy://user/profile/1',
+                          version: QrVersions.auto,
+                          size: 200.0,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('关闭'),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => _saveQRCodeToGallery(qrKey),
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('保存图片'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3FAAF0),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _saveQRCodeToGallery(GlobalKey key) async {
+    try {
+      // 1. Request Permission
+      // For Android 10+ (API 29+), storage permission is not explicitly needed for saving public images,
+      // but standard approach typically checks photos/storage.
+      // For simple implementation we try direct save, catch error if permission needed.
+      // However, permission_handler is good practice.
+      /*
+      if (Platform.isAndroid) {
+         // Check android version logic if needed, or just rely on image_gallery_saver to handle
+      } else {
+         var status = await Permission.photosAddOnly.request();
+         if (!status.isGranted) {
+           throw Exception('Permission denied');
+         }
+      }
+      */
+
+      // 2. Capture Image
+      final boundary =
+          key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      // Increase pixel ratio for better quality
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final pngBytes = byteData!.buffer.asUint8List();
+
+      // 3. Save to Gallery
+      final result = await ImageGallerySaver.saveImage(
+        pngBytes,
+        quality: 100,
+        name: "jogy_qr_code_${DateTime.now().millisecondsSinceEpoch}",
+      );
+
+      if (result['isSuccess'] == true) {
+        if (mounted) {
+          Navigator.pop(context); // Optional: close dialog on success
+        }
+      } else {
+        throw Exception('Save failed: ${result['errorMessage']}');
+      }
+    } catch (e) {
+      // Intentionally no system prompt for a cleaner UI.
+    }
+  }
 }
 
 // 用户位置标记 - 使用与气泡缩小时相同的样式，颜色为橙色
@@ -926,9 +1062,6 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
               GestureDetector(
                 onTap: () {
                   // TODO: Implement publish logic
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('发布功能即将推出')));
                 },
                 child: Container(
                   padding: const EdgeInsets.all(8),
@@ -958,9 +1091,6 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
                   GestureDetector(
                     onTap: () {
                       // TODO: Implement image picker
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('图片选择功能即将推出')),
-                      );
                     },
                     child: Container(
                       width: 100,

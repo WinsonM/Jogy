@@ -56,5 +56,7 @@
 	<string>我们需要获取您的位置以在地图上显示您附近的内容</string>
 	<key>NSCameraUsageDescription</key>
 	<string>我们需要访问您的相机以扫描二维码</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>我们需要权限将二维码保存到您的相册</string>
 </dict>
 </plist>

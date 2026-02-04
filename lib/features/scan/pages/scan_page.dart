@@ -55,14 +55,6 @@ class _ScanPageState extends State<ScanPage> {
                   _isProcessing = true;
                   debugPrint('Barcode found! ${barcode.rawValue}');
 
-                  // Show result or handle action
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('扫描结果: ${barcode.rawValue}'),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-
                   // Optional: Pop with result
                   // Navigator.pop(context, barcode.rawValue);
 
