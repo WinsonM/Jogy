@@ -20,6 +20,10 @@ class _MyProfilePageState extends State<MyProfilePage> {
 
   // 滚动控制器
   final ScrollController _scrollController = ScrollController();
+  bool _isTabPinned = false;
+  final GlobalKey _scrollTabKey = GlobalKey();
+  final GlobalKey _pinnedTabKey = GlobalKey();
+  double _pinnedTabY = 0.0;
 
   // 模拟当前用户数据（可编辑）
   String _userName = '我的用户名';
@@ -38,7 +42,12 @@ class _MyProfilePageState extends State<MyProfilePage> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _mockPosts = _generateMockPosts();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updatePinnedTabY();
+    });
   }
 
   /// 生成模拟帖子数据
@@ -106,8 +115,40 @@ class _MyProfilePageState extends State<MyProfilePage> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    final shouldPin = _shouldPinTabBar();
+    if (shouldPin != _isTabPinned) {
+      setState(() {
+        _isTabPinned = shouldPin;
+      });
+    }
+  }
+
+  void _updatePinnedTabY() {
+    final box = _pinnedTabKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final y = box.localToGlobal(Offset.zero).dy;
+    if (y != _pinnedTabY) {
+      _pinnedTabY = y;
+      if (mounted) {
+        _onScroll();
+      }
+    }
+  }
+
+  bool _shouldPinTabBar() {
+    final scrollBox =
+        _scrollTabKey.currentContext?.findRenderObject() as RenderBox?;
+    if (scrollBox == null || _pinnedTabY == 0.0) {
+      return false;
+    }
+    final scrollTabY = scrollBox.localToGlobal(Offset.zero).dy;
+    return scrollTabY <= _pinnedTabY;
   }
 
   void _openSettings() {
@@ -136,6 +177,11 @@ class _MyProfilePageState extends State<MyProfilePage> {
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
+    if (_pinnedTabY == 0.0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _updatePinnedTabY();
+      });
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -250,7 +296,122 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 ),
                 const SizedBox(height: 24),
                 // Tab栏
-                Container(
+                IgnorePointer(
+                  ignoring: _isTabPinned,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 180),
+                    opacity: _isTabPinned ? 0.0 : 1.0,
+                    child: Container(
+                      key: _scrollTabKey,
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      height: 45,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Stack(
+                        children: [
+                          // 选中指示器
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                            left:
+                                _selectedTabIndex *
+                                (MediaQuery.of(context).size.width - 40 - 8) /
+                                    3,
+                            top: 0,
+                            bottom: 0,
+                            width:
+                                (MediaQuery.of(context).size.width - 40 - 8) /
+                                    3,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(21),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withAlpha(20),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Tab 项
+                          Row(
+                            children: [
+                              _buildTabItem('发布', 0),
+                              _buildTabItem('喜欢', 1),
+                              _buildTabItem('收藏', 2),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // 根据选中的 tab 显示不同内容
+                _buildTabContent(),
+                const SizedBox(height: 100),
+              ],
+            ),
+          ),
+          // 固定 Tab 后的顶部蒙版，遮住滚动内容
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: topPadding + 64,
+            child: IgnorePointer(
+              ignoring: !_isTabPinned,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: _isTabPinned ? 1.0 : 0.0,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    child: Container(color: Colors.white.withAlpha(230)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // 固定的设置按钮 - 右上角
+          Positioned(
+            top: topPadding + 12,
+            right: 16,
+            child: GestureDetector(
+              onTap: _openSettings,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.settings_outlined,
+                  color: Colors.black,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+          // 固定 Tab 栏（到达顶部后停住）
+          Positioned(
+            top: topPadding + 64,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              ignoring: !_isTabPinned,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: _isTabPinned ? 1.0 : 0.0,
+                child: Container(
+                  key: _pinnedTabKey,
                   margin: const EdgeInsets.symmetric(horizontal: 20),
                   height: 45,
                   decoration: BoxDecoration(
@@ -260,7 +421,6 @@ class _MyProfilePageState extends State<MyProfilePage> {
                   padding: const EdgeInsets.all(4),
                   child: Stack(
                     children: [
-                      // 选中指示器
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutCubic,
@@ -285,7 +445,6 @@ class _MyProfilePageState extends State<MyProfilePage> {
                           ),
                         ),
                       ),
-                      // Tab 项
                       Row(
                         children: [
                           _buildTabItem('发布', 0),
@@ -295,31 +454,6 @@ class _MyProfilePageState extends State<MyProfilePage> {
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 10),
-                // 根据选中的 tab 显示不同内容
-                _buildTabContent(),
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-          // 固定的设置按钮 - 右上角
-          Positioned(
-            top: topPadding + 12,
-            right: 16,
-            child: GestureDetector(
-              onTap: _openSettings,
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.settings_outlined,
-                  color: Colors.black,
-                  size: 22,
                 ),
               ),
             ),
