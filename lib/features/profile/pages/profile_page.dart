@@ -40,6 +40,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final ScrollController _scrollController = ScrollController();
   bool _showBackButtonBg = false;
   bool _isCollapsed = false; // 头部是否折叠
+  final GlobalKey _scrollTabKey = GlobalKey();
+  final GlobalKey _pinnedTabKey = GlobalKey();
+  double _pinnedTabY = 0.0;
 
   // 模拟帖子数据
   late List<PostModel> _mockPosts;
@@ -62,6 +65,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
     // 初始化模拟数据
     _mockPosts = _generateMockPosts();
+
+    // 首帧后获取固定 Tab 的目标位置
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updatePinnedTabY();
+    });
   }
 
   /// 生成模拟帖子数据
@@ -160,9 +168,8 @@ class _ProfilePageState extends State<ProfilePage> {
   void _onScroll() {
     // 滚动超过 20px 时显示玻璃背景
     final shouldShowBg = _scrollController.offset > 20;
-    // 滚动超过展开头部高度时折叠
-    final shouldCollapse =
-        _scrollController.offset > _expandedHeaderHeight - 100;
+    // 当滚动 Tab 到达固定位置后折叠
+    final shouldCollapse = _shouldPinTabBar();
 
     if (shouldShowBg != _showBackButtonBg || shouldCollapse != _isCollapsed) {
       setState(() {
@@ -170,6 +177,29 @@ class _ProfilePageState extends State<ProfilePage> {
         _isCollapsed = shouldCollapse;
       });
     }
+  }
+
+  void _updatePinnedTabY() {
+    final box = _pinnedTabKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final y = box.localToGlobal(Offset.zero).dy;
+    if (y != _pinnedTabY) {
+      _pinnedTabY = y;
+      if (mounted) {
+        _onScroll();
+      }
+    }
+  }
+
+  bool _shouldPinTabBar() {
+    final scrollBox =
+        _scrollTabKey.currentContext?.findRenderObject() as RenderBox?;
+    if (scrollBox == null || _pinnedTabY == 0.0) {
+      // 回退到旧阈值，避免首帧抖动
+      return _scrollController.offset > _expandedHeaderHeight - 100;
+    }
+    final scrollTabY = scrollBox.localToGlobal(Offset.zero).dy;
+    return scrollTabY <= _pinnedTabY;
   }
 
   void _toggleFollow() {
@@ -193,6 +223,11 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
     final canPop = Navigator.canPop(context);
+    if (_pinnedTabY == 0.0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _updatePinnedTabY();
+      });
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -285,49 +320,60 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 24),
                 // Tab栏 - 匹配导航栏样式
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  height: 45,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  child: Stack(
-                    children: [
-                      // 选中指示器
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutCubic,
-                        left:
-                            _selectedTabIndex *
-                            ((MediaQuery.of(context).size.width - 40 - 8) / 3),
-                        top: 0,
-                        bottom: 0,
-                        width: (MediaQuery.of(context).size.width - 40 - 8) / 3,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(21),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(20),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
+                IgnorePointer(
+                  ignoring: _isCollapsed,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 180),
+                    opacity: _isCollapsed ? 0.0 : 1.0,
+                    child: Container(
+                      key: _scrollTabKey,
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      height: 45,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Stack(
+                        children: [
+                          // 选中指示器
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                            left:
+                                _selectedTabIndex *
+                                ((MediaQuery.of(context).size.width - 40 - 8) /
+                                    3),
+                            top: 0,
+                            bottom: 0,
+                            width:
+                                (MediaQuery.of(context).size.width - 40 - 8) /
+                                    3,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(21),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withAlpha(20),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
+                            ),
+                          ),
+                          // Tab 项
+                          Row(
+                            children: [
+                              _buildTabItem('发布', 0),
+                              _buildTabItem('喜欢', 1),
+                              _buildTabItem('收藏', 2),
                             ],
                           ),
-                        ),
-                      ),
-                      // Tab 项
-                      Row(
-                        children: [
-                          _buildTabItem('发布', 0),
-                          _buildTabItem('喜欢', 1),
-                          _buildTabItem('收藏', 2),
                         ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -392,14 +438,20 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-          // 固定的折叠头部（滚动时显示）
-          if (_isCollapsed)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: _buildCollapsedHeader(topPadding, canPop),
+          // 固定的折叠头部（跟随滚动状态淡入淡出）
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              ignoring: !_isCollapsed,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: _isCollapsed ? 1.0 : 0.0,
+                child: _buildCollapsedHeader(topPadding, canPop),
+              ),
             ),
+          ),
         ],
       ),
     );
@@ -487,6 +539,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           // 固定的 Tab 栏
           Container(
+            key: _pinnedTabKey,
             margin: const EdgeInsets.fromLTRB(20, 4, 20, 8),
             height: 45,
             decoration: BoxDecoration(
