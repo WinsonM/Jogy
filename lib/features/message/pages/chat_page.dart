@@ -42,39 +42,51 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              itemCount: _messages.length + 1, // +1 for timestamp
-              itemBuilder: (context, index) {
-                if (index == 4) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Center(
-                      child: Text(
-                        '11月10日 周一 下午7:16',
-                        style: TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+      body: GestureDetector(
+        onHorizontalDragEnd: (details) {
+          // Swipe Left (Drag Right-to-Left) to view profile
+          // standard "Push" navigation gesture
+          if (details.primaryVelocity! < -1000) {
+            _navigateToProfile();
+          }
+        },
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                itemCount: _messages.length + 1, // +1 for timestamp
+                itemBuilder: (context, index) {
+                  if (index == 4) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: Text(
+                          '11月10日 周一 下午7:16',
+                          style: TextStyle(
+                            color: Color(0xFF8E8E93),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }
-                // Adjust index because of inserted timestamp
-                final msgIndex = index > 4 ? index - 1 : index;
-                final msg = _messages[msgIndex];
+                    );
+                  }
+                  // Adjust index because of inserted timestamp
+                  final msgIndex = index > 4 ? index - 1 : index;
+                  final msg = _messages[msgIndex];
 
-                return _buildMessageBubble(msg);
-              },
+                  return _buildMessageBubble(msg);
+                },
+              ),
             ),
-          ),
-          _buildInputArea(),
-        ],
+            _buildInputArea(),
+          ],
+        ),
       ),
     );
   }
@@ -122,18 +134,7 @@ class _ChatPageState extends State<ChatPage> {
       ),
       centerTitle: true,
       title: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ProfilePage(
-                userName: widget.userName,
-                avatarUrl: widget.avatarUrl,
-                isFollowing: false, // TODO: 从数据库获取关注状态
-              ),
-            ),
-          );
-        },
+        onTap: _navigateToProfile,
         child: Column(
           children: [
             CircleAvatar(
@@ -271,6 +272,19 @@ class _ChatPageState extends State<ChatPage> {
         );
       }
     });
+  }
+
+  void _navigateToProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfilePage(
+          userName: widget.userName,
+          avatarUrl: widget.avatarUrl,
+          isFollowing: false, // TODO: 从数据库获取关注状态
+        ),
+      ),
+    );
   }
 
   @override

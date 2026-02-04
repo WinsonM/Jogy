@@ -27,7 +27,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late String _userName;
   late String _avatarUrl;
   late String _bio;
-  int _selectedTabIndex = 0; // 0: 喜欢, 1: 收藏
+  int _selectedTabIndex = 0; // 0: 发布, 1: 喜欢, 2: 收藏
 
   // 滚动控制器和状态
   final ScrollController _scrollController = ScrollController();
@@ -177,12 +177,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutCubic,
-                        left: _selectedTabIndex == 0
-                            ? 0
-                            : (MediaQuery.of(context).size.width - 40 - 8) / 2,
+                        left:
+                            _selectedTabIndex *
+                            ((MediaQuery.of(context).size.width - 40 - 8) / 3),
                         top: 0,
                         bottom: 0,
-                        width: (MediaQuery.of(context).size.width - 40 - 8) / 2,
+                        width: (MediaQuery.of(context).size.width - 40 - 8) / 3,
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -200,8 +200,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       // Tab 项
                       Row(
                         children: [
-                          _buildTabItem('喜欢', 0),
-                          _buildTabItem('收藏', 1),
+                          _buildTabItem('发布', 0),
+                          _buildTabItem('喜欢', 1),
+                          _buildTabItem('收藏', 2),
                         ],
                       ),
                     ],
@@ -220,10 +221,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   itemCount: 12,
                   itemBuilder: (context, index) {
+                    // 根据不同的 tab 显示不同的内容占位
+                    final seed = _selectedTabIndex * 100 + index;
                     return Container(
                       color: Colors.grey[200],
                       child: Image.network(
-                        'https://picsum.photos/200/200?random=$index',
+                        'https://picsum.photos/200/200?random=$seed',
                         fit: BoxFit.cover,
                       ),
                     );
