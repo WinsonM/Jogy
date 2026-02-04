@@ -27,8 +27,10 @@ class MessagePage extends StatefulWidget {
   State<MessagePage> createState() => _MessagePageState();
 }
 
-class _MessagePageState extends State<MessagePage> {
+class _MessagePageState extends State<MessagePage>
+    with TickerProviderStateMixin {
   late List<MessageItem> _messages;
+  late List<SlidableController> _controllers;
 
   @override
   void initState() {
@@ -42,6 +44,17 @@ class _MessagePageState extends State<MessagePage> {
         unreadCount: (index * 7 + 3) % 50,
       );
     });
+
+    // Initialize controllers for each item
+    _controllers = List.generate(10, (index) => SlidableController(this));
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   void _togglePin(MessageItem item) {
@@ -57,10 +70,27 @@ class _MessagePageState extends State<MessagePage> {
     });
   }
 
-  void _deleteMessage(MessageItem item) {
+  void _deleteMessage(MessageItem item, int index) {
     setState(() {
-      _messages.remove(item);
+      _messages.removeAt(index);
+      // Remove controller corresponding to deleted item
+      _controllers[index].dispose();
+      _controllers.removeAt(index);
     });
+  }
+
+  // Handle tap on background or other items
+  // Returns true if an action pane was closed, false otherwise
+  bool _closeOpenSlidables() {
+    bool closed = false;
+    for (var controller in _controllers) {
+      // Check if pane is open (ActionPaneType.end in our case)
+      if (controller.actionPaneType.value != ActionPaneType.none) {
+        controller.close();
+        closed = true;
+      }
+    }
+    return closed;
   }
 
   @override
@@ -69,214 +99,221 @@ class _MessagePageState extends State<MessagePage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
-      body: Stack(
-        children: [
-          // Full screen message list with gradient mask
-          ShaderMask(
-            shaderCallback: (Rect bounds) {
-              return LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: const [
-                  Colors.transparent,
-                  Colors.white,
-                  Colors.white,
-                  Colors.transparent,
-                ],
-                stops: [0.0, (topPadding + 70) / bounds.height, 0.85, 1.0],
-              ).createShader(bounds);
-            },
-            blendMode: BlendMode.dstIn,
-            child: ListView.separated(
-              padding: EdgeInsets.only(
-                top: topPadding + 80,
-                bottom: 120,
-                left: 16,
-                right: 16,
-              ),
-              itemCount: _messages.length,
-              separatorBuilder: (c, i) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final item = _messages[index];
+      body: GestureDetector(
+        onTap: () {
+          // Close any open swipe actions when tapping background
+          _closeOpenSlidables();
+        },
+        behavior: HitTestBehavior.opaque,
+        child: Stack(
+          children: [
+            // Full screen message list with gradient mask
+            ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: const [
+                    Colors.transparent,
+                    Colors.white,
+                    Colors.white,
+                    Colors.transparent,
+                  ],
+                  stops: [0.0, (topPadding + 70) / bounds.height, 0.85, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.dstIn,
+              child: ListView.separated(
+                padding: EdgeInsets.only(
+                  top: topPadding + 80,
+                  bottom: 120,
+                  left: 16,
+                  right: 16,
+                ),
+                itemCount: _messages.length,
+                separatorBuilder: (c, i) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final item = _messages[index];
 
-                return Slidable(
-                  key: ValueKey(item.id),
-                  groupTag: 'message_list',
-                  endActionPane: ActionPane(
-                    motion: const DrawerMotion(),
-                    extentRatio: 0.35,
-                    children: [
-                      // Pin Button
-                      CustomSlidableAction(
-                        onPressed: (context) {
-                          _togglePin(item);
-                        },
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: _buildGlassIcon(Icons.push_pin, Colors.grey),
-                      ),
-                      // Delete Button
-                      CustomSlidableAction(
-                        onPressed: (context) {
-                          _deleteMessage(item);
-                        },
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: _buildGlassIcon(Icons.delete, Colors.red),
-                      ),
-                    ],
-                  ),
-                  child: Builder(
-                    builder: (context) {
-                      return GestureDetector(
-                        onTap: () {
-                          final slidable = Slidable.of(context);
-                          if (slidable != null &&
-                              slidable.actionPaneType.value !=
-                                  ActionPaneType.none) {
-                            slidable.close();
-                            return;
-                          }
+                  return Slidable(
+                    key: ValueKey(item.id),
+                    controller: _controllers[index],
+                    // Disable automatic closing group tag to handle manually
+                    groupTag: 'message_list',
+                    endActionPane: ActionPane(
+                      motion: const DrawerMotion(),
+                      extentRatio: 0.35,
+                      children: [
+                        // Pin Button
+                        CustomSlidableAction(
+                          onPressed: (context) {
+                            _togglePin(item);
+                          },
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _buildGlassIcon(Icons.push_pin, Colors.grey),
+                        ),
+                        // Delete Button
+                        CustomSlidableAction(
+                          onPressed: (context) {
+                            _deleteMessage(item, index);
+                          },
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _buildGlassIcon(Icons.delete, Colors.red),
+                        ),
+                      ],
+                    ),
+                    child: Builder(
+                      builder: (context) {
+                        return GestureDetector(
+                          onTap: () {
+                            // If any slide is open, close it and DO NOT navigate
+                            if (_closeOpenSlidables()) {
+                              return;
+                            }
 
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatPage(
-                                userName: item.userName,
-                                avatarUrl: item.avatarUrl,
-                                unreadCount: item.unreadCount,
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatPage(
+                                  userName: item.userName,
+                                  avatarUrl: item.avatarUrl,
+                                  unreadCount: item.unreadCount,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            height: 80,
+                            decoration: BoxDecoration(
+                              // Grey background for pinned items
+                              color: item.isPinned
+                                  ? Colors.grey[200]
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(40),
+                              border: Border.all(
+                                color: Colors.black12,
+                                width: 0.5,
                               ),
                             ),
-                          );
-                        },
-                        child: Container(
-                          height: 80,
-                          decoration: BoxDecoration(
-                            // Grey background for pinned items
-                            color: item.isPinned
-                                ? Colors.grey[200]
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(40),
-                            border: Border.all(
-                              color: Colors.black12,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const SizedBox(width: 10),
-                              Stack(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 28,
-                                    backgroundImage: NetworkImage(
-                                      item.avatarUrl,
+                            child: Row(
+                              children: [
+                                const SizedBox(width: 10),
+                                Stack(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 28,
+                                      backgroundImage: NetworkImage(
+                                        item.avatarUrl,
+                                      ),
                                     ),
-                                  ),
-                                  if (index < 3)
-                                    Positioned(
-                                      right: 0,
-                                      bottom: 0,
-                                      child: Container(
-                                        width: 14,
-                                        height: 14,
-                                        decoration: BoxDecoration(
-                                          color: Colors.green,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 2,
+                                    if (index < 3)
+                                      Positioned(
+                                        right: 0,
+                                        bottom: 0,
+                                        child: Container(
+                                          width: 14,
+                                          height: 14,
+                                          decoration: BoxDecoration(
+                                            color: Colors.green,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 2,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.userName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'This is a preview message content...',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 13,
-                                      ),
-                                    ),
                                   ],
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(right: 20),
-                                child: Text(
-                                  '12:00',
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 12,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.userName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'This is a preview message content...',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 20),
+                                  child: Text(
+                                    '12:00',
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-          // Fixed Title Button
-          Positioned(
-            top: topPadding + 12,
-            left: 16,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(25),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(153),
-                    borderRadius: BorderRadius.circular(25),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(20),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
+            // Fixed Title Button
+            Positioned(
+              top: topPadding + 12,
+              left: 16,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(25),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(153),
+                      borderRadius: BorderRadius.circular(25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(20),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      '消息',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 24,
                       ),
-                    ],
-                  ),
-                  child: const Text(
-                    '消息',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
