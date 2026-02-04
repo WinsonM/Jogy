@@ -36,9 +36,13 @@ class _ProfilePageState extends State<ProfilePage> {
   // 滚动控制器和状态
   final ScrollController _scrollController = ScrollController();
   bool _showBackButtonBg = false;
+  bool _isCollapsed = false; // 头部是否折叠
 
   // 模拟帖子数据
   late List<PostModel> _mockPosts;
+
+  // 头部展开时的高度（头像 + 名字 + bio + 按钮区域）
+  static const double _expandedHeaderHeight = 260.0;
 
   @override
   void initState() {
@@ -150,10 +154,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _onScroll() {
     // 滚动超过 20px 时显示玻璃背景
-    final shouldShow = _scrollController.offset > 20;
-    if (shouldShow != _showBackButtonBg) {
+    final shouldShowBg = _scrollController.offset > 20;
+    // 滚动超过展开头部高度时折叠
+    final shouldCollapse =
+        _scrollController.offset > _expandedHeaderHeight - 100;
+
+    if (shouldShowBg != _showBackButtonBg || shouldCollapse != _isCollapsed) {
       setState(() {
-        _showBackButtonBg = shouldShow;
+        _showBackButtonBg = shouldShowBg;
+        _isCollapsed = shouldCollapse;
       });
     }
   }
@@ -351,6 +360,157 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
               ),
             ),
+          // 模糊遮罩（折叠时覆盖原始内容）
+          if (_isCollapsed)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 200, // 覆盖原头像和按钮区域
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  child: Container(color: Colors.white.withAlpha(180)),
+                ),
+              ),
+            ),
+          // 固定的折叠头部（滚动时显示）
+          if (_isCollapsed)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _buildCollapsedHeader(topPadding, canPop),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建折叠后的固定头部
+  Widget _buildCollapsedHeader(double topPadding, bool canPop) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.only(top: topPadding),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 第一行：返回按钮 + 头像 + 按钮（带淡入淡出动画）
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 200),
+            opacity: _isCollapsed ? 1.0 : 0.0,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  // 返回按钮
+                  if (canPop)
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: const Icon(Icons.arrow_back_ios_new, size: 20),
+                    ),
+                  if (canPop) const SizedBox(width: 12),
+                  // 小头像
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Colors.grey[300],
+                    backgroundImage: NetworkImage(_avatarUrl),
+                  ),
+                  const Spacer(),
+                  // 关注按钮
+                  GestureDetector(
+                    onTap: _toggleFollow,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _isFollowing ? Colors.grey[300] : Colors.black,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        _isFollowing ? '已关注' : '关注',
+                        style: TextStyle(
+                          color: _isFollowing ? Colors.black : Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 消息按钮
+                  GestureDetector(
+                    onTap: _openChat,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Text(
+                        '消息',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // 固定的 Tab 栏
+          Container(
+            margin: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            height: 45,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(25),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Stack(
+              children: [
+                // 选中指示器
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  left: _selectedTabIndex * ((screenWidth - 40 - 8) / 3),
+                  top: 0,
+                  bottom: 0,
+                  width: (screenWidth - 40 - 8) / 3,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(21),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(20),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Tab 项
+                Row(
+                  children: [
+                    _buildTabItem('发布', 0),
+                    _buildTabItem('喜欢', 1),
+                    _buildTabItem('收藏', 2),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -1,9 +1,67 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'chat_page.dart';
 
-class MessagePage extends StatelessWidget {
+// Message Model
+class MessageItem {
+  final int id;
+  final String userName;
+  final String avatarUrl;
+  final int unreadCount;
+  bool isPinned;
+
+  MessageItem({
+    required this.id,
+    required this.userName,
+    required this.avatarUrl,
+    this.unreadCount = 0,
+    this.isPinned = false,
+  });
+}
+
+class MessagePage extends StatefulWidget {
   const MessagePage({super.key});
+
+  @override
+  State<MessagePage> createState() => _MessagePageState();
+}
+
+class _MessagePageState extends State<MessagePage> {
+  late List<MessageItem> _messages;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize mock data
+    _messages = List.generate(10, (index) {
+      return MessageItem(
+        id: index,
+        userName: 'User Name $index',
+        avatarUrl: 'https://i.pravatar.cc/150?img=$index',
+        unreadCount: (index * 7 + 3) % 50,
+      );
+    });
+  }
+
+  void _togglePin(MessageItem item) {
+    setState(() {
+      item.isPinned = !item.isPinned;
+      // Sort: Pinned items first, then by ID (original order)
+      _messages.sort((a, b) {
+        if (a.isPinned == b.isPinned) {
+          return a.id.compareTo(b.id);
+        }
+        return b.isPinned ? 1 : -1;
+      });
+    });
+  }
+
+  void _deleteMessage(MessageItem item) {
+    setState(() {
+      _messages.remove(item);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +71,7 @@ class MessagePage extends StatelessWidget {
       backgroundColor: const Color(0xFFF2F2F7),
       body: Stack(
         children: [
-          // 全屏消息列表 - 使用 ShaderMask 实现顶部和底部渐变
+          // Full screen message list with gradient mask
           ShaderMask(
             shaderCallback: (Rect bounds) {
               return LinearGradient(
@@ -25,118 +83,164 @@ class MessagePage extends StatelessWidget {
                   Colors.white,
                   Colors.transparent,
                 ],
-                // 顶部渐变到安全区域+标题按钮下方，底部 15% 渐变
                 stops: [0.0, (topPadding + 70) / bounds.height, 0.85, 1.0],
               ).createShader(bounds);
             },
             blendMode: BlendMode.dstIn,
             child: ListView.separated(
               padding: EdgeInsets.only(
-                top: topPadding + 80, // 给标题按钮留空间
-                bottom: 120, // 给导航栏留空间
+                top: topPadding + 80,
+                bottom: 120,
                 left: 16,
                 right: 16,
               ),
-              itemCount: 10,
+              itemCount: _messages.length,
               separatorBuilder: (c, i) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
-                final userName = 'User Name $index';
-                final avatarUrl = 'https://i.pravatar.cc/150?img=$index';
+                final item = _messages[index];
 
-                return GestureDetector(
-                  onTap: () {
-                    // Mock 未读消息数 - 实际应从数据库获取
-                    final unreadCount = (index * 7 + 3) % 50; // 模拟随机未读数
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ChatPage(
-                          userName: userName,
-                          avatarUrl: avatarUrl,
-                          unreadCount: unreadCount,
-                        ),
+                return Slidable(
+                  key: ValueKey(item.id),
+                  groupTag: 'message_list',
+                  endActionPane: ActionPane(
+                    motion: const DrawerMotion(),
+                    extentRatio: 0.35,
+                    children: [
+                      // Pin Button
+                      CustomSlidableAction(
+                        onPressed: (context) {
+                          _togglePin(item);
+                        },
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: _buildGlassIcon(Icons.push_pin, Colors.grey),
                       ),
-                    );
-                  },
-                  child: Container(
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(40),
-                      border: Border.all(color: Colors.black12, width: 0.5),
-                    ),
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 10),
-                        Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 28,
-                              backgroundImage: NetworkImage(avatarUrl),
+                      // Delete Button
+                      CustomSlidableAction(
+                        onPressed: (context) {
+                          _deleteMessage(item);
+                        },
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: _buildGlassIcon(Icons.delete, Colors.red),
+                      ),
+                    ],
+                  ),
+                  child: Builder(
+                    builder: (context) {
+                      return GestureDetector(
+                        onTap: () {
+                          final slidable = Slidable.of(context);
+                          if (slidable != null &&
+                              slidable.actionPaneType.value !=
+                                  ActionPaneType.none) {
+                            slidable.close();
+                            return;
+                          }
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatPage(
+                                userName: item.userName,
+                                avatarUrl: item.avatarUrl,
+                                unreadCount: item.unreadCount,
+                              ),
                             ),
-                            if (index < 3)
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  width: 14,
-                                  height: 14,
-                                  decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 2,
+                          );
+                        },
+                        child: Container(
+                          height: 80,
+                          decoration: BoxDecoration(
+                            // Grey background for pinned items
+                            color: item.isPinned
+                                ? Colors.grey[200]
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(40),
+                            border: Border.all(
+                              color: Colors.black12,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 10),
+                              Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 28,
+                                    backgroundImage: NetworkImage(
+                                      item.avatarUrl,
                                     ),
                                   ),
+                                  if (index < 3)
+                                    Positioned(
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        width: 14,
+                                        height: 14,
+                                        decoration: BoxDecoration(
+                                          color: Colors.green,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.userName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'This is a preview message content...',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                userName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'This is a preview message content...',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 13,
+                              Padding(
+                                padding: const EdgeInsets.only(right: 20),
+                                child: Text(
+                                  '12:00',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.only(right: 20),
-                          child: Text(
-                            '12:00',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 );
               },
             ),
           ),
-          // 固定的顶部标题按钮 - 不会被渐变遮挡
+          // Fixed Title Button
           Positioned(
             top: topPadding + 12,
             left: 16,
@@ -150,7 +254,7 @@ class MessagePage extends StatelessWidget {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(153), // 60% 不透明度
+                    color: Colors.white.withAlpha(153),
                     borderRadius: BorderRadius.circular(25),
                     boxShadow: [
                       BoxShadow(
@@ -173,6 +277,29 @@ class MessagePage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGlassIcon(IconData icon, Color color) {
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        color: color.withAlpha(30),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withAlpha(50), width: 1),
+      ),
+      child: Center(
+        child: ClipOval(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: Container(
+              color: Colors.transparent,
+              child: Icon(icon, color: color, size: 24),
+            ),
+          ),
+        ),
       ),
     );
   }
