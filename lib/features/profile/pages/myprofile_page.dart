@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../auth/pages/login_page.dart';
@@ -23,6 +24,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
   // 模拟当前用户数据（可编辑）
   String _userName = '我的用户名';
   String _avatarUrl = 'https://i.pravatar.cc/300?img=5';
+  File? _localAvatarFile;
   String _bio = '这是我的个人简介 ✨';
   String _gender = '保密';
   DateTime? _birthday;
@@ -151,7 +153,9 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 CircleAvatar(
                   radius: 50,
                   backgroundColor: Colors.grey[300],
-                  backgroundImage: NetworkImage(_avatarUrl),
+                  backgroundImage: _localAvatarFile != null
+                      ? FileImage(_localAvatarFile!) as ImageProvider
+                      : NetworkImage(_avatarUrl),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -187,6 +191,11 @@ class _MyProfilePageState extends State<MyProfilePage> {
                                 result['userName'] as String? ?? _userName;
                             _avatarUrl =
                                 result['avatarUrl'] as String? ?? _avatarUrl;
+                            final localPath =
+                                result['localAvatarPath'] as String?;
+                            if (localPath != null) {
+                              _localAvatarFile = File(localPath);
+                            }
                             _bio = result['bio'] as String? ?? _bio;
                             _gender = result['gender'] as String? ?? _gender;
                             _birthday =

@@ -135,6 +135,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     Navigator.pop(context, {
       'userName': newUserName,
       'avatarUrl': _currentAvatarUrl,
+      'localAvatarPath': _localAvatarFile?.path,
       'bio': newBio,
       'gender': _gender,
       'birthday': _birthday,
