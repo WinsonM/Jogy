@@ -60,28 +60,18 @@ class GlassPostCard extends StatelessWidget {
     );
   }
 
-  /// 构建左侧日期列
+  /// 构建左侧智能时间显示
   Widget _buildDateColumn() {
+    final timeText = TimeFormatter.formatRelative(post.createdAt);
     return SizedBox(
-      width: 48,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 日期数字
-          Text(
-            post.createdAt.day.toString().padLeft(2, '0'),
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          // 月份
-          Text(
-            '${post.createdAt.month}月',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
-        ],
+      width: 56,
+      child: Text(
+        timeText,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey[700],
+        ),
       ),
     );
   }
@@ -142,24 +132,11 @@ class GlassPostCard extends StatelessWidget {
 
   /// 构建文字内容
   Widget _buildContentText() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // 内容文字（单行截断）
-        Text(
-          post.content,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14, color: Colors.black87),
-        ),
-        const SizedBox(height: 4),
-        // 发布时间
-        Text(
-          TimeFormatter.formatRelative(post.createdAt),
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-        ),
-      ],
+    return Text(
+      post.content,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(fontSize: 14, color: Colors.black87),
     );
   }
 }
