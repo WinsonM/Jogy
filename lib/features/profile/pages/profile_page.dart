@@ -1,6 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../message/pages/chat_page.dart';
+import '../../../data/models/post_model.dart';
+import '../../../data/models/user_model.dart';
+import '../../../data/models/location_model.dart';
+import '../widgets/posts_timeline.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? userId;
@@ -33,6 +37,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final ScrollController _scrollController = ScrollController();
   bool _showBackButtonBg = false;
 
+  // 模拟帖子数据
+  late List<PostModel> _mockPosts;
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +51,94 @@ class _ProfilePageState extends State<ProfilePage> {
 
     // 监听滚动
     _scrollController.addListener(_onScroll);
+
+    // 初始化模拟数据
+    _mockPosts = _generateMockPosts();
+  }
+
+  /// 生成模拟帖子数据
+  List<PostModel> _generateMockPosts() {
+    final now = DateTime.now();
+    final mockUser = UserModel(
+      id: 'user_1',
+      username: _userName,
+      avatarUrl: _avatarUrl,
+      bio: _bio,
+    );
+    const mockLocation = LocationModel(
+      latitude: 31.2304,
+      longitude: 121.4737,
+      address: '上海市',
+    );
+
+    return [
+      // 刚刚发布的帖子（测试分钟前）
+      PostModel(
+        id: 'post_1',
+        user: mockUser,
+        location: mockLocation,
+        content: '全网紧急寻亲！21岁扬大女生患白血病急需骨髓移植，裸辞...',
+        imageUrls: const ['https://picsum.photos/200/200?random=1'],
+        createdAt: now.subtract(const Duration(minutes: 5)),
+      ),
+      // 几小时前的帖子
+      PostModel(
+        id: 'post_2',
+        user: mockUser,
+        location: mockLocation,
+        content: '21岁，她亲手为自己签下病危通知书',
+        imageUrls: const ['https://picsum.photos/200/200?random=2'],
+        createdAt: now.subtract(const Duration(hours: 3)),
+      ),
+      // 昨天的帖子
+      PostModel(
+        id: 'post_3',
+        user: mockUser,
+        location: mockLocation,
+        content: '呼。',
+        imageUrls: const [
+          'https://picsum.photos/200/200?random=3',
+          'https://picsum.photos/200/200?random=4',
+          'https://picsum.photos/200/200?random=5',
+          'https://picsum.photos/200/200?random=6',
+          'https://picsum.photos/200/200?random=7',
+          'https://picsum.photos/200/200?random=8',
+        ],
+        createdAt: now.subtract(const Duration(days: 1)),
+      ),
+      // 2025年的帖子
+      PostModel(
+        id: 'post_4',
+        user: mockUser,
+        location: mockLocation,
+        content: '出现一下来点存在感叭',
+        imageUrls: const [
+          'https://picsum.photos/200/200?random=9',
+          'https://picsum.photos/200/200?random=10',
+          'https://picsum.photos/200/200?random=11',
+          'https://picsum.photos/200/200?random=12',
+          'https://picsum.photos/200/200?random=13',
+          'https://picsum.photos/200/200?random=14',
+          'https://picsum.photos/200/200?random=15',
+          'https://picsum.photos/200/200?random=16',
+          'https://picsum.photos/200/200?random=17',
+        ],
+        createdAt: DateTime(2025, 11, 30),
+      ),
+      PostModel(
+        id: 'post_5',
+        user: mockUser,
+        location: mockLocation,
+        content: '跨越半个世纪的婚约...听爷爷奶奶们讲相遇相知相爱，"我爱您""相伴永...',
+        imageUrls: const [
+          'https://picsum.photos/200/200?random=18',
+          'https://picsum.photos/200/200?random=19',
+          'https://picsum.photos/200/200?random=20',
+          'https://picsum.photos/200/200?random=21',
+        ],
+        createdAt: DateTime(2025, 8, 29),
+      ),
+    ];
   }
 
   @override
@@ -209,29 +304,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                GridView.builder(
-                  padding: const EdgeInsets.all(2),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 2,
-                    mainAxisSpacing: 2,
-                    childAspectRatio: 1,
-                  ),
-                  itemCount: 12,
-                  itemBuilder: (context, index) {
-                    // 根据不同的 tab 显示不同的内容占位
-                    final seed = _selectedTabIndex * 100 + index;
-                    return Container(
-                      color: Colors.grey[200],
-                      child: Image.network(
-                        'https://picsum.photos/200/200?random=$seed',
-                        fit: BoxFit.cover,
-                      ),
-                    );
-                  },
-                ),
+                // 根据选中的 tab 显示不同内容
+                _buildTabContent(),
                 const SizedBox(height: 100),
               ],
             ),
@@ -305,5 +379,44 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ),
     );
+  }
+
+  /// 根据选中的 tab 构建内容
+  Widget _buildTabContent() {
+    switch (_selectedTabIndex) {
+      case 0: // 发布
+        return PostsTimeline(
+          posts: _mockPosts,
+          onPostTap: (post) {
+            // TODO: 导航到帖子详情页
+          },
+        );
+      case 1: // 喜欢
+      case 2: // 收藏
+      default:
+        // 其他 tab 暂时显示占位 GridView
+        return GridView.builder(
+          padding: const EdgeInsets.all(2),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+            childAspectRatio: 1,
+          ),
+          itemCount: 12,
+          itemBuilder: (context, index) {
+            final seed = _selectedTabIndex * 100 + index;
+            return Container(
+              color: Colors.grey[200],
+              child: Image.network(
+                'https://picsum.photos/200/200?random=$seed',
+                fit: BoxFit.cover,
+              ),
+            );
+          },
+        );
+    }
   }
 }
