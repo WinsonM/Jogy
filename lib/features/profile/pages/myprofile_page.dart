@@ -1,6 +1,11 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../auth/pages/login_page.dart';
+import '../widgets/posts_timeline.dart';
+import '../../../data/models/post_model.dart';
+import '../../../data/models/user_model.dart';
+import '../../../data/models/location_model.dart';
+import 'edit_profile_page.dart';
 
 class MyProfilePage extends StatefulWidget {
   const MyProfilePage({super.key});
@@ -15,17 +20,84 @@ class _MyProfilePageState extends State<MyProfilePage> {
   // 滚动控制器
   final ScrollController _scrollController = ScrollController();
 
-  // 模拟当前用户数据
-  final String _userName = '我的用户名';
-  final String _avatarUrl = 'https://i.pravatar.cc/300?img=5';
-  final String _bio = '这是我的个人简介 ✨';
+  // 模拟当前用户数据（可编辑）
+  String _userName = '我的用户名';
+  String _avatarUrl = 'https://i.pravatar.cc/300?img=5';
+  String _bio = '这是我的个人简介 ✨';
   final int _postsCount = 42;
   final int _followersCount = 1234;
   final int _followingCount = 567;
 
+  // 模拟帖子数据
+  late List<PostModel> _mockPosts;
+
   @override
   void initState() {
     super.initState();
+    _mockPosts = _generateMockPosts();
+  }
+
+  /// 生成模拟帖子数据
+  List<PostModel> _generateMockPosts() {
+    final now = DateTime.now();
+    final mockUser = UserModel(
+      id: 'my_user',
+      username: _userName,
+      avatarUrl: _avatarUrl,
+      bio: _bio,
+    );
+    const mockLocation = LocationModel(
+      latitude: 31.2304,
+      longitude: 121.4737,
+      address: '上海市',
+    );
+
+    return [
+      PostModel(
+        id: 'my_post_1',
+        user: mockUser,
+        location: mockLocation,
+        content: '今天天气真好，出去走走 🌞',
+        imageUrls: const ['https://picsum.photos/200/200?random=101'],
+        createdAt: now.subtract(const Duration(hours: 2)),
+      ),
+      PostModel(
+        id: 'my_post_2',
+        user: mockUser,
+        location: mockLocation,
+        content: '分享一些最近的摄影作品',
+        imageUrls: const [
+          'https://picsum.photos/200/200?random=102',
+          'https://picsum.photos/200/200?random=103',
+          'https://picsum.photos/200/200?random=104',
+        ],
+        createdAt: now.subtract(const Duration(days: 1)),
+      ),
+      PostModel(
+        id: 'my_post_3',
+        user: mockUser,
+        location: mockLocation,
+        content: '周末的小确幸 ☕',
+        imageUrls: const [
+          'https://picsum.photos/200/200?random=105',
+          'https://picsum.photos/200/200?random=106',
+        ],
+        createdAt: now.subtract(const Duration(days: 3)),
+      ),
+      PostModel(
+        id: 'my_post_4',
+        user: mockUser,
+        location: mockLocation,
+        content: '记录生活的美好瞬间',
+        imageUrls: const [
+          'https://picsum.photos/200/200?random=107',
+          'https://picsum.photos/200/200?random=108',
+          'https://picsum.photos/200/200?random=109',
+          'https://picsum.photos/200/200?random=110',
+        ],
+        createdAt: DateTime(2025, 10, 15),
+      ),
+    ];
   }
 
   @override
@@ -92,11 +164,26 @@ class _MyProfilePageState extends State<MyProfilePage> {
                     ),
                     const SizedBox(width: 8),
                     GestureDetector(
-                      onTap: () {
-                        // TODO: 导航到编辑个人资料页面
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('编辑资料功能即将推出')),
-                        );
+                      onTap: () async {
+                        final result =
+                            await Navigator.push<Map<String, String>>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => EditProfilePage(
+                                  userName: _userName,
+                                  avatarUrl: _avatarUrl,
+                                  bio: _bio,
+                                ),
+                              ),
+                            );
+                        // 更新用户资料
+                        if (result != null && mounted) {
+                          setState(() {
+                            _userName = result['userName'] ?? _userName;
+                            _avatarUrl = result['avatarUrl'] ?? _avatarUrl;
+                            _bio = result['bio'] ?? _bio;
+                          });
+                        }
                       },
                       child: Icon(
                         Icons.edit_outlined,
@@ -179,28 +266,8 @@ class _MyProfilePageState extends State<MyProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                // 内容网格
-                GridView.builder(
-                  padding: const EdgeInsets.all(2),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 2,
-                    mainAxisSpacing: 2,
-                    childAspectRatio: 1,
-                  ),
-                  itemCount: 15,
-                  itemBuilder: (context, index) {
-                    return Container(
-                      color: Colors.grey[200],
-                      child: Image.network(
-                        'https://picsum.photos/200/200?random=${index + 100}',
-                        fit: BoxFit.cover,
-                      ),
-                    );
-                  },
-                ),
+                // 根据选中的 tab 显示不同内容
+                _buildTabContent(),
                 const SizedBox(height: 100),
               ],
             ),
@@ -267,6 +334,45 @@ class _MyProfilePageState extends State<MyProfilePage> {
         ),
       ),
     );
+  }
+
+  /// 根据选中的 tab 构建内容
+  Widget _buildTabContent() {
+    switch (_selectedTabIndex) {
+      case 0: // 发布
+        return PostsTimeline(
+          posts: _mockPosts,
+          onPostTap: (post) {
+            // TODO: 导航到帖子详情页
+          },
+        );
+      case 1: // 喜欢
+      case 2: // 收藏
+      default:
+        // 其他 tab 暂时显示占位 GridView
+        return GridView.builder(
+          padding: const EdgeInsets.all(2),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+            childAspectRatio: 1,
+          ),
+          itemCount: 12,
+          itemBuilder: (context, index) {
+            final seed = _selectedTabIndex * 100 + index;
+            return Container(
+              color: Colors.grey[200],
+              child: Image.network(
+                'https://picsum.photos/200/200?random=$seed',
+                fit: BoxFit.cover,
+              ),
+            );
+          },
+        );
+    }
   }
 }
 

@@ -58,5 +58,7 @@
 	<string>我们需要访问您的相机以扫描二维码</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>我们需要权限将二维码保存到您的相册</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>我们需要访问您的相册以选择头像</string>
 </dict>
 </plist>
