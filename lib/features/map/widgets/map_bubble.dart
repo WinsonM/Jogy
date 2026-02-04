@@ -250,14 +250,36 @@ Path _buildBubblePath(Size size, bool isExpanded) {
     Offset(w - r, h - MapBubbleWidget.arrowHeight),
     radius: Radius.circular(r),
   );
-  path.lineTo(w / 2 + 15, h - MapBubbleWidget.arrowHeight);
-  path.lineTo(w / 2, h);
-  path.lineTo(w / 2 - 15, h - MapBubbleWidget.arrowHeight);
-  path.lineTo(r, h - MapBubbleWidget.arrowHeight);
-  path.arcToPoint(
-    Offset(0, h - MapBubbleWidget.arrowHeight - r),
-    radius: Radius.circular(r),
+
+  // Curved Tail Logic
+  final tailWidth = 20.0; // Width of the tail at the base
+  final tailHeight = MapBubbleWidget.arrowHeight;
+  final centerX = w / 2;
+  final bottomY = h - tailHeight;
+
+  // Draw right side of the bottom edge until tail start
+  path.lineTo(centerX + tailWidth, bottomY);
+
+  // Curve down to the tip
+  // Control point is slightly inward and down to create a smooth curve
+  path.quadraticBezierTo(
+    centerX + tailWidth * 0.4,
+    bottomY, // Control point 1: Smooth start
+    centerX,
+    h, // Target point: Tip
   );
+
+  // Curve up from the tip
+  path.quadraticBezierTo(
+    centerX - tailWidth * 0.4,
+    bottomY, // Control point 2: Smooth end
+    centerX - tailWidth,
+    bottomY, // Target point: End of tail on the left
+  );
+
+  // Draw left side of the bottom edge
+  path.lineTo(r, bottomY);
+  path.arcToPoint(Offset(0, bottomY - r), radius: Radius.circular(r));
   path.lineTo(0, r);
   path.arcToPoint(Offset(r, 0), radius: Radius.circular(r));
   return path;

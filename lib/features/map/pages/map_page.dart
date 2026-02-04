@@ -13,6 +13,7 @@ import '../../../config/map_config.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/datasources/mock_data_source.dart';
 import 'search_page.dart';
+import '../../scan/pages/scan_page.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -324,8 +325,11 @@ class _MapPageState extends State<MapPage> {
                               label: '扫一扫',
                               onTap: () {
                                 Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('扫码功能即将推出')),
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const ScanPage(),
+                                  ),
                                 );
                               },
                             ),
