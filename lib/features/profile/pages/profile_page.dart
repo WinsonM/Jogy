@@ -11,6 +11,7 @@ class ProfilePage extends StatefulWidget {
   final String? userName;
   final String? avatarUrl;
   final String? bio;
+  final String? gender;
   final bool? isFollowing;
 
   const ProfilePage({
@@ -19,6 +20,7 @@ class ProfilePage extends StatefulWidget {
     this.userName,
     this.avatarUrl,
     this.bio,
+    this.gender,
     this.isFollowing,
   });
 
@@ -31,6 +33,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late String _userName;
   late String _avatarUrl;
   late String _bio;
+  late String _gender;
   int _selectedTabIndex = 0; // 0: 发布, 1: 喜欢, 2: 收藏
 
   // 滚动控制器和状态
@@ -52,6 +55,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _userName = widget.userName ?? 'Alice Chen';
     _avatarUrl = widget.avatarUrl ?? 'https://i.pravatar.cc/300';
     _bio = widget.bio ?? 'Digital nomad & coffee enthusiast ☕️';
+    _gender = widget.gender ?? '女'; // Default to female for mock profile
 
     // 监听滚动
     _scrollController.addListener(_onScroll);
@@ -68,6 +72,7 @@ class _ProfilePageState extends State<ProfilePage> {
       username: _userName,
       avatarUrl: _avatarUrl,
       bio: _bio,
+      gender: _gender,
     );
     const mockLocation = LocationModel(
       latitude: 31.2304,
@@ -215,7 +220,20 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(_bio, style: const TextStyle(color: Colors.grey)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_gender != '保密') ...[
+                      Icon(
+                        _gender == '男' ? Icons.male : Icons.female,
+                        size: 16,
+                        color: _gender == '男' ? Colors.blue : Colors.pink,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(_bio, style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
                 const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

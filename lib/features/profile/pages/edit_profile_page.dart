@@ -8,12 +8,16 @@ class EditProfilePage extends StatefulWidget {
   final String userName;
   final String avatarUrl;
   final String bio;
+  final String gender;
+  final DateTime? birthday;
 
   const EditProfilePage({
     super.key,
     required this.userName,
     required this.avatarUrl,
     required this.bio,
+    required this.gender,
+    this.birthday,
   });
 
   @override
@@ -24,6 +28,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _userNameController;
   late TextEditingController _bioController;
   late String _currentAvatarUrl;
+  late String _gender;
+  DateTime? _birthday;
   File? _localAvatarFile; // 本地选择的头像文件
   final ImagePicker _picker = ImagePicker();
 
@@ -33,6 +39,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _userNameController = TextEditingController(text: widget.userName);
     _bioController = TextEditingController(text: widget.bio);
     _currentAvatarUrl = widget.avatarUrl;
+    _gender = widget.gender;
+    _birthday = widget.birthday;
   }
 
   @override
@@ -128,6 +136,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
       'userName': newUserName,
       'avatarUrl': _currentAvatarUrl,
       'bio': newBio,
+      'gender': _gender,
+      'birthday': _birthday,
     });
   }
 
@@ -206,6 +216,81 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         hintText: '请输入个性签名',
                         maxLength: 100,
                         maxLines: 3,
+                      ),
+                      const SizedBox(height: 24),
+                      // 性别
+                      _buildLabel('性别'),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _gender,
+                            isExpanded: true,
+                            icon: const Icon(Icons.arrow_drop_down),
+                            items: ['男', '女', '保密'].map((String value) {
+                              return DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              );
+                            }).toList(),
+                            onChanged: (newValue) {
+                              setState(() {
+                                _gender = newValue!;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // 出生日期
+                      _buildLabel('出生日期'),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          final DateTime? picked = await showDatePicker(
+                            context: context,
+                            initialDate: _birthday ?? DateTime(2000),
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime.now(),
+                            locale: const Locale('zh', 'CN'),
+                          );
+                          if (picked != null && picked != _birthday) {
+                            setState(() {
+                              _birthday = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                _birthday == null
+                                    ? '选择出生日期'
+                                    : '${_birthday!.year}-${_birthday!.month.toString().padLeft(2, '0')}-${_birthday!.day.toString().padLeft(2, '0')}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const Spacer(),
+                              const Icon(
+                                Icons.calendar_today,
+                                size: 18,
+                                color: Colors.grey,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),

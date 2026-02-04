@@ -24,6 +24,8 @@ class _MyProfilePageState extends State<MyProfilePage> {
   String _userName = '我的用户名';
   String _avatarUrl = 'https://i.pravatar.cc/300?img=5';
   String _bio = '这是我的个人简介 ✨';
+  String _gender = '保密';
+  DateTime? _birthday;
   final int _postsCount = 42;
   final int _followersCount = 1234;
   final int _followingCount = 567;
@@ -166,22 +168,29 @@ class _MyProfilePageState extends State<MyProfilePage> {
                     GestureDetector(
                       onTap: () async {
                         final result =
-                            await Navigator.push<Map<String, String>>(
+                            await Navigator.push<Map<String, dynamic>>(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => EditProfilePage(
                                   userName: _userName,
                                   avatarUrl: _avatarUrl,
                                   bio: _bio,
+                                  gender: _gender,
+                                  birthday: _birthday,
                                 ),
                               ),
                             );
                         // 更新用户资料
                         if (result != null && mounted) {
                           setState(() {
-                            _userName = result['userName'] ?? _userName;
-                            _avatarUrl = result['avatarUrl'] ?? _avatarUrl;
-                            _bio = result['bio'] ?? _bio;
+                            _userName =
+                                result['userName'] as String? ?? _userName;
+                            _avatarUrl =
+                                result['avatarUrl'] as String? ?? _avatarUrl;
+                            _bio = result['bio'] as String? ?? _bio;
+                            _gender = result['gender'] as String? ?? _gender;
+                            _birthday =
+                                result['birthday'] as DateTime? ?? _birthday;
                           });
                         }
                       },
@@ -194,7 +203,20 @@ class _MyProfilePageState extends State<MyProfilePage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(_bio, style: const TextStyle(color: Colors.grey)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_gender != '保密') ...[
+                      Icon(
+                        _gender == '男' ? Icons.male : Icons.female,
+                        size: 16,
+                        color: _gender == '男' ? Colors.blue : Colors.pink,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(_bio, style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
                 const SizedBox(height: 20),
                 // 统计数据
                 Row(

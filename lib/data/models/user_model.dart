@@ -3,6 +3,7 @@ class UserModel {
   final String username;
   final String avatarUrl;
   final String bio;
+  final String gender;
   final int followers;
   final int following;
 
@@ -11,6 +12,7 @@ class UserModel {
     required this.username,
     required this.avatarUrl,
     required this.bio,
+    this.gender = '保密',
     this.followers = 0,
     this.following = 0,
   });
@@ -21,6 +23,7 @@ class UserModel {
       username: json['username'] as String,
       avatarUrl: json['avatarUrl'] as String,
       bio: json['bio'] as String,
+      gender: json['gender'] as String? ?? '保密',
       followers: json['followers'] as int? ?? 0,
       following: json['following'] as int? ?? 0,
     );
@@ -32,6 +35,7 @@ class UserModel {
       'username': username,
       'avatarUrl': avatarUrl,
       'bio': bio,
+      'gender': gender,
       'followers': followers,
       'following': following,
     };
