@@ -1054,8 +1054,8 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
                         // Toggle buttons row
                         Row(
                           children: [
-                            _buildToggleItem('图片', true),
-                            _buildToggleItem('文字', false),
+                            _buildToggleItem('气泡', true),
+                            _buildToggleItem('广播', false),
                           ],
                         ),
                       ],
