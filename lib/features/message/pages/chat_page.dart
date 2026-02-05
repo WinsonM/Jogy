@@ -1,10 +1,14 @@
 import 'dart:io';
+import 'dart:ui'; // Added for ImageFilter
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../profile/pages/profile_page.dart';
 
 class ChatPage extends StatefulWidget {
+  // ...
+  // ... (SKIP to _buildAppBar)
+
   final String userName;
   final String avatarUrl;
   final int unreadCount; // 未读消息数，从数据库获取
@@ -48,6 +52,139 @@ class _ChatPageState extends State<ChatPage> {
   final List<File> _selectedImages = [];
   final List<File> _selectedFiles = [];
 
+  // Pending messages buffer (to solve scroll jitter)
+  final List<Map<String, dynamic>> _pendingMessages = [];
+
+  // Scroll to bottom button state
+  bool _showScrollButton = false;
+
+  // Getter for unread count (based on pending messages)
+  int get _unreadNewMessages => _pendingMessages.length;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    // Initial scroll to bottom
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+  }
+
+  void _onScroll() {
+    // Show button if we are scrolled up from bottom
+    if (!_scrollController.hasClients) return;
+
+    // In reverse: true list:
+    // Bottom = offset 0.0
+    // Scrolled Up = offset > 0.0
+
+    final currentScroll = _scrollController.offset;
+    final isScrolledUp = currentScroll > 100; // Threshold 100px
+
+    if (isScrolledUp != _showScrollButton) {
+      if (!isScrolledUp && mounted) {
+        // We reached bottom manually
+        // 1. Merge pending messages if any
+        if (_pendingMessages.isNotEmpty) {
+          setState(() {
+            // Messages are reversed: index 0 is newest.
+            // Pending messages are new. So we insert them at 0.
+            // But _pendingMessages order? "add" appends to end.
+            // If we simulated receiving 1, 2, 3.
+            // _pendingMessages = [1, 2, 3].
+            // We want them at top of main list.
+            // _messages.insertAll(0, ...).
+            // But we need to reverse them?
+            // If I receive 1, then 2. 2 is newer.
+            // Main list: [2, 1, 0...]
+            // So we should insert 2, then 1?
+            // Actually _pendingMessages should probably be:
+            // If I receive A, then B.
+            // Buffer: [A, B].
+            // To merge: We want [B, A, ...old...].
+            // So we reverse buffer and insert at 0?
+            // Or just insert each at 0 as we iterate?
+
+            // Simplest: insertAll(0, _pendingMessages.reversed)
+            _messages.insertAll(0, _pendingMessages.reversed);
+            _pendingMessages.clear();
+            _showScrollButton = false;
+          });
+        }
+
+        setState(() {
+          _showScrollButton = false;
+        });
+      } else if (mounted) {
+        setState(() {
+          _showScrollButton = true;
+        });
+      }
+    }
+  }
+
+  void _receiveMockMessage() {
+    // Check if we are at bottom
+    if (!_scrollController.hasClients) return;
+    final currentScroll = _scrollController.offset;
+    final bool isScrolledUp = currentScroll > 50;
+
+    final newMessage = {
+      'isMe': false,
+      'type': 'text',
+      'content': '这是一条模拟的对方消息 ${_messages.length + _pendingMessages.length}',
+    };
+
+    setState(() {
+      if (isScrolledUp) {
+        // Buffer the message! Do NOT add to main list.
+        _pendingMessages.add(newMessage);
+        _showScrollButton = true;
+      } else {
+        // At bottom: Add directly to index 0 (newest)
+        _messages.insert(0, newMessage);
+        // Scroll to 0.0 to keep visually stable (though layout might twitch slightly, it's better than logic jump)
+        // Actually, if we are at 0.0, inserting at 0 pushes content up.
+        // Wait, native flutter reverse list: inserting at 0 pushes old content UP.
+        // The viewport stays at 0.0 (showing new item).
+        // This IS the jump the user wanted to avoid?
+        // "消息列表不动" -> "Interface stays unchanged".
+        // So standard list ADDING to bottom is stable.
+        // Reverse list INSERTING at 0 moves everything?
+        // NO. Reverse list: Viewport is anchored to 0.0.
+        // Inserting at 0 means old 0 becomes 1.
+        // The content at 0.0 changes from OldMsg to NewMsg.
+        // So visually: The content CHANGES.
+        // The user wants "Interface unchanged".
+        // The ONLY way to do that is BUFFERING (which we do if isScrolledUp).
+        // BUT if !isScrolledUp (at bottom), standard behavior is to show new message.
+        // So this logic is correct.
+        _scrollToBottom();
+      }
+    });
+  }
+
+  void _handleScrollButtonTap() {
+    // When tapping button:
+    // 1. Merge all pending messages
+    // 2. Scroll to bottom
+    if (_pendingMessages.isNotEmpty) {
+      setState(() {
+        _messages.insertAll(0, _pendingMessages.reversed);
+        _pendingMessages.clear();
+      });
+    }
+
+    _scrollToBottom();
+
+    setState(() {
+      _showScrollButton = false;
+    });
+  }
+
+  // ... existing methods ...
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,8 +192,6 @@ class _ChatPageState extends State<ChatPage> {
       appBar: _buildAppBar(),
       body: GestureDetector(
         onHorizontalDragEnd: (details) {
-          // Swipe Left (Drag Right-to-Left) to view profile
-          // standard "Push" navigation gesture
           if (details.primaryVelocity! < -1000) {
             _navigateToProfile();
           }
@@ -64,40 +199,115 @@ class _ChatPageState extends State<ChatPage> {
         child: Column(
           children: [
             Expanded(
-              child: ListView.builder(
-                reverse: true, // List grows upwards
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                itemCount: _messages.length + 1, // +1 for timestamp
-                itemBuilder: (context, index) {
-                  if (index == 4) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Center(
-                        child: Text(
-                          '11月10日 周一 下午7:16',
-                          style: TextStyle(
-                            color: Color(0xFF8E8E93),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  ListView.builder(
+                    reverse: true, // List grows upwards
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    itemCount: _messages.length + 1, // +1 for timestamp
+                    itemBuilder: (context, index) {
+                      if (index == _messages.length) {
+                        // Timestamp at end (top)
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              '11月10日 周一 下午7:16',
+                              style: TextStyle(
+                                color: Color(0xFF8E8E93),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  }
-                  // Adjust index because of inserted timestamp
-                  final msgIndex = index > 4 ? index - 1 : index;
-                  final msg = _messages[msgIndex];
+                        );
+                      }
+                      final msg = _messages[index];
+                      return _buildMessageBubble(msg);
+                    },
+                  ),
 
-                  return _buildMessageBubble(msg);
-                },
+                  // Scroll to bottom button
+                  if (_showScrollButton)
+                    Positioned(
+                      right: 16,
+                      bottom:
+                          16, // Relative to the message list bottom (above input)
+                      child: GestureDetector(
+                        onTap: _handleScrollButtonTap,
+                        child: _buildGlassScrollButton(),
+                      ),
+                    ),
+                ],
               ),
             ),
             _buildInputArea(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassScrollButton() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.3)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Icon(
+                Icons.keyboard_arrow_down,
+                color: Colors.black87,
+                size: 24,
+              ),
+              if (_unreadNewMessages > 0)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      _unreadNewMessages > 99 ? '99+' : '$_unreadNewMessages',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -172,9 +382,12 @@ class _ChatPageState extends State<ChatPage> {
           ],
         ),
       ),
-      actions: const [
-        // No video button as requested
-        SizedBox(width: 16),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.bug_report_outlined, color: Colors.grey),
+          onPressed: _receiveMockMessage, // Simulation trigger
+        ),
+        const SizedBox(width: 16),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1.0),
