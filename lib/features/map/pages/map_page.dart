@@ -458,6 +458,9 @@ class _MapPageState extends State<MapPage> {
               options: MapOptions(
                 initialCenter: mapCenter,
                 initialZoom: 15.0,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                ),
                 onTap: (_, __) {
                   // Clear manual selection and disable auto-expand
                   final collapsedIndex = _expandedIndex;
