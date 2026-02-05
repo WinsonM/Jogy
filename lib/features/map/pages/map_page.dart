@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+import '../../../../core/database/database_helper.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -981,6 +985,119 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
   String _selectedDuration = '永久'; // 留存时长
   bool _showPickerWheel = false; // 是否显示滚轮选择器
 
+  // Post publish state
+  final List<File> _selectedPostImages = [];
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _contentController = TextEditingController();
+
+  Future<void> _pickPostImage() async {
+    try {
+      final List<XFile> images = await ImagePicker().pickMultiImage();
+      if (images.isNotEmpty) {
+        setState(() {
+          _selectedPostImages.addAll(images.map((img) => File(img.path)));
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking post image: $e');
+    }
+  }
+
+  void _removePostImage(int index) {
+    setState(() {
+      _selectedPostImages.removeAt(index);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDraft();
+  }
+
+  Future<void> _loadDraft() async {
+    final draft = await DatabaseHelper().getDraft();
+    if (draft != null && mounted) {
+      setState(() {
+        if (draft['title'] != null) {
+          _titleController.text = draft['title'];
+        }
+        if (draft['content'] != null) {
+          _contentController.text = draft['content'];
+        }
+        if (draft['image_paths'] != null) {
+          try {
+            List<dynamic> paths = jsonDecode(draft['image_paths']);
+            _selectedPostImages.addAll(paths.map((e) => File(e.toString())));
+          } catch (e) {
+            debugPrint('Error parsing draft images: $e');
+          }
+        }
+        // Restore type if needed, or default
+        if (draft['type'] == 'broadcast') {
+          _isImageMode = false;
+        } else {
+          _isImageMode = true;
+        }
+      });
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    List<String> imagePaths = _selectedPostImages.map((e) => e.path).toList();
+    await DatabaseHelper().saveDraft({
+      'title': _titleController.text,
+      'content': _contentController.text,
+      'image_paths': jsonEncode(imagePaths),
+      'type': _isImageMode ? 'bubble' : 'broadcast',
+    });
+  }
+
+  Future<void> _deleteDraft() async {
+    await DatabaseHelper().deleteDraft();
+  }
+
+  Future<void> _onCloseTap() async {
+    // Check if dirty
+    bool isDirty =
+        _titleController.text.isNotEmpty ||
+        _contentController.text.isNotEmpty ||
+        _selectedPostImages.isNotEmpty;
+
+    if (!isDirty) {
+      Navigator.pop(context);
+      return;
+    }
+
+    final bool? shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('保存草稿？'),
+        content: const Text('保存后，下次打开将自动恢复输入内容。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('不保存', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('保存', style: TextStyle(color: Color(0xFF3FAAF0))),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSave == null) return; // Dismissed
+
+    if (shouldSave) {
+      await _saveDraft();
+    } else {
+      await _deleteDraft();
+    }
+
+    if (mounted) Navigator.pop(context);
+  }
+
   static const List<String> _durationOptions = [
     '30分钟',
     '1个小时',
@@ -1006,7 +1123,7 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
             children: [
               // Close button (left)
               GestureDetector(
-                onTap: () => Navigator.pop(context),
+                onTap: _onCloseTap,
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -1085,168 +1202,248 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
           ),
         ),
         // Content area
+        // Content area
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Image picker (only when 图片 mode)
-                if (_isImageMode) ...[
-                  GestureDetector(
-                    onTap: () {
-                      // TODO: Implement image picker
-                    },
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Image picker (only when 图片 mode)
+                  // Image picker (only when 图片 mode)
+                  if (_isImageMode) ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ..._selectedPostImages.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final file = entry.value;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.file(
+                                      file,
+                                      fit: BoxFit.cover,
+                                      width: 100,
+                                      height: 100,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: GestureDetector(
+                                      onTap: () => _removePostImage(index),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.5,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.close,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          GestureDetector(
+                            onTap: _pickPostImage,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: Icon(
+                                Icons.add,
+                                size: 40,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Icon(Icons.add, size: 40, color: Colors.grey[400]),
                     ),
+                    const SizedBox(height: 16),
+
+                    // Title Input (Only in Bubble mode)
+                    TextField(
+                      controller: _titleController,
+                      maxLength: 20,
+                      decoration: InputDecoration(
+                        hintText: '加个标题...',
+                        hintStyle: TextStyle(
+                          color: Colors.grey[400],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        counterText: "", // Hide counter
+                      ),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // Text input
+                  TextField(
+                    controller: _contentController,
+                    maxLines: null,
+                    decoration: InputDecoration(
+                      hintText: _isImageMode ? '写点什么...' : '发布广播...',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    style: const TextStyle(fontSize: 16),
                   ),
-                  const SizedBox(height: 16),
-                ],
-                // Text input
-                TextField(
-                  maxLines: null,
-                  decoration: InputDecoration(
-                    hintText: '请输入文字...',
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  style: const TextStyle(fontSize: 16),
-                ),
-                // Retention duration selector (only in text mode)
-                if (!_isImageMode) ...[
-                  const SizedBox(height: 24),
-                  // Glass bubble label - tappable
-                  GestureDetector(
-                    onTap: () {
-                      setState(() => _showPickerWheel = !_showPickerWheel);
-                    },
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(153),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(20),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                '留存时长',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                  // Retention duration selector (only in text mode)
+                  if (!_isImageMode) ...[
+                    const SizedBox(height: 24),
+                    // Glass bubble label - tappable
+                    GestureDetector(
+                      onTap: () {
+                        setState(() => _showPickerWheel = !_showPickerWheel);
+                      },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(153),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withAlpha(20),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 2),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _selectedDuration,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF3FAAF0),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  '留存时长',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              AnimatedRotation(
-                                duration: const Duration(milliseconds: 200),
-                                turns: _showPickerWheel ? 0.5 : 0,
-                                child: Icon(
-                                  Icons.keyboard_arrow_down,
-                                  size: 18,
-                                  color: Colors.grey[600],
+                                const SizedBox(width: 8),
+                                Text(
+                                  _selectedDuration,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF3FAAF0),
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                AnimatedRotation(
+                                  duration: const Duration(milliseconds: 200),
+                                  turns: _showPickerWheel ? 0.5 : 0,
+                                  child: Icon(
+                                    Icons.keyboard_arrow_down,
+                                    size: 18,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  // Animated wheel picker
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutCubic,
-                    child: _showPickerWheel
-                        ? Column(
-                            children: [
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                height: 120,
-                                child: CupertinoPicker(
-                                  scrollController: FixedExtentScrollController(
-                                    initialItem: _durationOptions.indexOf(
-                                      _selectedDuration,
-                                    ),
+                    // Animated wheel picker
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      child: _showPickerWheel
+                          ? Column(
+                              children: [
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  height: 120,
+                                  child: CupertinoPicker(
+                                    scrollController:
+                                        FixedExtentScrollController(
+                                          initialItem: _durationOptions.indexOf(
+                                            _selectedDuration,
+                                          ),
+                                        ),
+                                    itemExtent: 36,
+                                    onSelectedItemChanged: (index) {
+                                      setState(
+                                        () => _selectedDuration =
+                                            _durationOptions[index],
+                                      );
+                                    },
+                                    children: _durationOptions.map((option) {
+                                      return Center(
+                                        child: Text(
+                                          option,
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                      );
+                                    }).toList(),
                                   ),
-                                  itemExtent: 36,
-                                  onSelectedItemChanged: (index) {
-                                    setState(
-                                      () => _selectedDuration =
-                                          _durationOptions[index],
-                                    );
+                                ),
+                                const SizedBox(height: 8),
+                                // Confirm button
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() => _showPickerWheel = false);
                                   },
-                                  children: _durationOptions.map((option) {
-                                    return Center(
-                                      child: Text(
-                                        option,
-                                        style: const TextStyle(fontSize: 16),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF3FAAF0),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      '确定',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              // Confirm button
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() => _showPickerWheel = false);
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF3FAAF0),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: const Text(
-                                    '确定',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          )
-                        : const SizedBox.shrink(),
-                  ),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
