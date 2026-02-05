@@ -1,0 +1,135 @@
+import 'dart:async';
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
+
+class DatabaseHelper {
+  static final DatabaseHelper _instance = DatabaseHelper._internal();
+  static Database? _database;
+
+  factory DatabaseHelper() => _instance;
+
+  DatabaseHelper._internal();
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'jogy_messages.db');
+
+    return await openDatabase(
+      path,
+      version: 2, // Upgrade version
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+  Future<void> _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE messages(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT,
+        content TEXT,
+        isMe INTEGER, -- 1 for true, 0 for false
+        timestamp INTEGER,
+        title TEXT, -- For link previews
+        subtitle TEXT, -- For link previews
+        fileName TEXT, -- For file messages
+        fileSize INTEGER -- For file messages
+      )
+    ''');
+
+    await _createChatSessionsTable(db);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createChatSessionsTable(db);
+    }
+  }
+
+  Future<void> _createChatSessionsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE chat_sessions(
+        chat_id TEXT PRIMARY KEY,
+        scroll_offset REAL,
+        last_updated INTEGER
+      )
+    ''');
+  }
+
+  // Insert a message
+  Future<int> insertMessage(Map<String, dynamic> message) async {
+    final db = await database;
+    // Adapt logic: boolean to int for SQLite
+    final Map<String, dynamic> dbMessage = Map.from(message);
+    if (dbMessage.containsKey('isMe')) {
+      dbMessage['isMe'] = (dbMessage['isMe'] == true) ? 1 : 0;
+    }
+    // Add timestamp if not present
+    if (!dbMessage.containsKey('timestamp')) {
+      dbMessage['timestamp'] = DateTime.now().millisecondsSinceEpoch;
+    }
+
+    return await db.insert('messages', dbMessage);
+  }
+
+  // Get messages (paged)
+  // Reversed: true means we get latest messages first (ORDER BY id DESC)
+  Future<List<Map<String, dynamic>>> getMessages({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'messages',
+      orderBy: 'timestamp DESC, id DESC', // Latest first
+      limit: limit,
+      offset: offset,
+    );
+
+    // Convert int back to boolean
+    return maps.map((map) {
+      final m = Map<String, dynamic>.from(map);
+      m['isMe'] = (m['isMe'] == 1);
+      return m;
+    }).toList();
+  }
+
+  // Save scroll offset for a chat
+  Future<void> saveScrollOffset(String chatId, double offset) async {
+    final db = await database;
+    await db.insert('chat_sessions', {
+      'chat_id': chatId,
+      'scroll_offset': offset,
+      'last_updated': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // Get scroll offset for a chat
+  Future<double?> getScrollOffset(String chatId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'chat_sessions',
+      where: 'chat_id = ?',
+      whereArgs: [chatId],
+    );
+
+    if (maps.isNotEmpty) {
+      return maps.first['scroll_offset'] as double?;
+    }
+    return null;
+  }
+
+  // Delete DB (for debug/reset)
+  Future<void> deleteDb() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'jogy_messages.db');
+    await deleteDatabase(path);
+    _database = null;
+  }
+}

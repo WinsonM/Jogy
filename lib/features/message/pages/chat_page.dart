@@ -3,6 +3,7 @@ import 'dart:ui'; // Added for ImageFilter
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../../core/database/database_helper.dart'; // Import DatabaseHelper
 import '../../profile/pages/profile_page.dart';
 
 class ChatPage extends StatefulWidget {
@@ -25,38 +26,22 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  // Mock messages
-  // Mock messages (Reversed order: Index 0 is newest/bottom)
-  final List<Map<String, dynamic>> _messages = [
-    {
-      'isMe': true,
-      'type': 'image_link',
-      'content':
-          'https://i.scdn.co/image/ab67616d0000b273b640e6c66601463ec162232f', // Example placeholder
-      'title': '牡丹江',
-      'subtitle': 'open.spotify.com',
-    },
-    {'isMe': true, 'type': 'text', 'content': '我就自己听'},
-    {'isMe': true, 'type': 'text', 'content': '可以突了'},
-    {'isMe': true, 'type': 'text', 'content': '那他真的'},
-    {'isMe': false, 'type': 'text', 'content': '我舍友曼城球迷 天天放'},
-    {'isMe': false, 'type': 'text', 'content': '确实好听'},
-    {'isMe': true, 'type': 'text', 'content': 'but 好听'},
-    {'isMe': true, 'type': 'text', 'content': 'iknow'},
-  ];
+  // Messages list (Main display list)
+  // Messages list (Main display list)
+  List<Map<String, dynamic>> _messages = []; // Removed mock data, start empty
 
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
-  // Selected files/images for preview (optional, for future use)
-  final List<File> _selectedImages = [];
-  final List<File> _selectedFiles = [];
 
   // Pending messages buffer (to solve scroll jitter)
   final List<Map<String, dynamic>> _pendingMessages = [];
 
   // Scroll to bottom button state
   bool _showScrollButton = false;
+
+  // Track valid scroll offset (to prevent 'has no clients' in dispose)
+  double _lastKnownOffset = 0.0;
 
   // Getter for unread count (based on pending messages)
   int get _unreadNewMessages => _pendingMessages.length;
@@ -65,9 +50,32 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    // Initial scroll to bottom
+    _loadMessages(); // Load from DB
+  }
+
+  // Load initial messages from DB
+  Future<void> _loadMessages() async {
+    final messages = await DatabaseHelper().getMessages(limit: 50);
+    final savedOffset = await DatabaseHelper().getScrollOffset(widget.userName);
+
+    setState(() {
+      _messages = messages;
+    });
+
+    // Initial scroll position
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
+      debugPrint('Restoring offset: $savedOffset for user: ${widget.userName}');
+      if (savedOffset != null && savedOffset > 0) {
+        if (_scrollController.hasClients) {
+          debugPrint('Jumping to offset: $savedOffset');
+          _scrollController.jumpTo(savedOffset);
+        } else {
+          debugPrint('ScrollController has no clients!');
+        }
+      } else {
+        debugPrint('ScrollToBottom (Default)');
+        _scrollToBottom(jump: true);
+      }
     });
   }
 
@@ -80,6 +88,8 @@ class _ChatPageState extends State<ChatPage> {
     // Scrolled Up = offset > 0.0
 
     final currentScroll = _scrollController.offset;
+    _lastKnownOffset = currentScroll; // Keep track of valid offset
+
     final isScrolledUp = currentScroll > 100; // Threshold 100px
 
     if (isScrolledUp != _showScrollButton) {
@@ -124,7 +134,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  void _receiveMockMessage() {
+  void _receiveMockMessage() async {
     // Check if we are at bottom
     if (!_scrollController.hasClients) return;
     final currentScroll = _scrollController.offset;
@@ -134,7 +144,15 @@ class _ChatPageState extends State<ChatPage> {
       'isMe': false,
       'type': 'text',
       'content': '这是一条模拟的对方消息 ${_messages.length + _pendingMessages.length}',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
+
+    // 1. Persist ALL messages to DB immediately (Try-catch to prevent UI freeze if DB fails)
+    try {
+      await DatabaseHelper().insertMessage(newMessage);
+    } catch (e) {
+      debugPrint('DB Insert Error: $e');
+    }
 
     setState(() {
       if (isScrolledUp) {
@@ -181,6 +199,48 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {
       _showScrollButton = false;
     });
+  }
+
+  // Helper to scroll to bottom
+  void _scrollToBottom({bool jump = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        if (jump) {
+          _scrollController.jumpTo(0.0);
+        } else {
+          _scrollController.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+    });
+  }
+
+  void _sendMessage(String text) async {
+    if (text.trim().isEmpty) return;
+
+    final newMessage = {
+      'isMe': true,
+      'type': 'text',
+      'content': text.trim(),
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    // 1. Persist to DB (Try-catch)
+    try {
+      await DatabaseHelper().insertMessage(newMessage);
+    } catch (e) {
+      debugPrint('DB Insert Error: $e');
+    }
+
+    setState(() {
+      _messages.insert(0, newMessage);
+      _controller.clear();
+    });
+
+    _scrollToBottom();
   }
 
   // ... existing methods ...
@@ -565,33 +625,6 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// Helper to scroll to bottom of message list (Visual Bottom is offset 0.0 in reverse list)
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          0.0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  void _sendMessage(String text) {
-    if (text.trim().isEmpty) return;
-    setState(() {
-      _messages.insert(0, {
-        'isMe': true,
-        'type': 'text',
-        'content': text.trim(),
-      });
-      _controller.clear();
-    });
-
-    _scrollToBottom();
-  }
-
   void _navigateToProfile() {
     Navigator.push(
       context,
@@ -599,7 +632,7 @@ class _ChatPageState extends State<ChatPage> {
         builder: (context) => ProfilePage(
           userName: widget.userName,
           avatarUrl: widget.avatarUrl,
-          isFollowing: false, // TODO: 从数据库获取关注状态
+          isFollowing: false, // Default to false or fetch from DB
         ),
       ),
     );
@@ -607,6 +640,13 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
+    // Save scroll offset before disposing
+    // Use _lastKnownOffset instead of accessing controller.offset which might be detached
+    debugPrint(
+      'Saving offset (safe): $_lastKnownOffset for user: ${widget.userName}',
+    );
+    DatabaseHelper().saveScrollOffset(widget.userName, _lastKnownOffset);
+
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
