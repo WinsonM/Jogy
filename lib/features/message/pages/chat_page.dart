@@ -22,14 +22,8 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   // Mock messages
+  // Mock messages (Reversed order: Index 0 is newest/bottom)
   final List<Map<String, dynamic>> _messages = [
-    {'isMe': true, 'type': 'text', 'content': 'iknow'},
-    {'isMe': true, 'type': 'text', 'content': 'but 好听'},
-    {'isMe': false, 'type': 'text', 'content': '确实好听'},
-    {'isMe': false, 'type': 'text', 'content': '我舍友曼城球迷 天天放'},
-    {'isMe': true, 'type': 'text', 'content': '那他真的'},
-    {'isMe': true, 'type': 'text', 'content': '可以突了'},
-    {'isMe': true, 'type': 'text', 'content': '我就自己听'},
     {
       'isMe': true,
       'type': 'image_link',
@@ -38,14 +32,21 @@ class _ChatPageState extends State<ChatPage> {
       'title': '牡丹江',
       'subtitle': 'open.spotify.com',
     },
+    {'isMe': true, 'type': 'text', 'content': '我就自己听'},
+    {'isMe': true, 'type': 'text', 'content': '可以突了'},
+    {'isMe': true, 'type': 'text', 'content': '那他真的'},
+    {'isMe': false, 'type': 'text', 'content': '我舍友曼城球迷 天天放'},
+    {'isMe': false, 'type': 'text', 'content': '确实好听'},
+    {'isMe': true, 'type': 'text', 'content': 'but 好听'},
+    {'isMe': true, 'type': 'text', 'content': 'iknow'},
   ];
 
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
   // Selected files/images for preview (optional, for future use)
-  List<File> _selectedImages = [];
-  List<File> _selectedFiles = [];
+  final List<File> _selectedImages = [];
+  final List<File> _selectedFiles = [];
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +65,7 @@ class _ChatPageState extends State<ChatPage> {
           children: [
             Expanded(
               child: ListView.builder(
+                reverse: true, // List grows upwards
                 controller: _scrollController,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -350,30 +352,27 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// Helper to scroll to bottom of message list
-  void _scrollToBottom({bool jump = false}) {
-    // Use double post-frame callback to ensure layout is complete
+  /// Helper to scroll to bottom of message list (Visual Bottom is offset 0.0 in reverse list)
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scrollController.hasClients) return;
-        final target = _scrollController.position.maxScrollExtent;
-        if (jump) {
-          _scrollController.jumpTo(target);
-        } else {
-          _scrollController.animateTo(
-            target,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
   void _sendMessage(String text) {
     if (text.trim().isEmpty) return;
     setState(() {
-      _messages.add({'isMe': true, 'type': 'text', 'content': text.trim()});
+      _messages.insert(0, {
+        'isMe': true,
+        'type': 'text',
+        'content': text.trim(),
+      });
       _controller.clear();
     });
 
@@ -498,7 +497,7 @@ class _ChatPageState extends State<ChatPage> {
         setState(() {
           // Add each image as a message
           for (final image in images) {
-            _messages.add({
+            _messages.insert(0, {
               'isMe': true,
               'type': 'image',
               'content': image.path,
@@ -554,7 +553,7 @@ class _ChatPageState extends State<ChatPage> {
         if (validFiles.isNotEmpty) {
           setState(() {
             for (final file in validFiles) {
-              _messages.add({
+              _messages.insert(0, {
                 'isMe': true,
                 'type': 'file',
                 'content': file.path,
