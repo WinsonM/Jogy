@@ -17,6 +17,7 @@ import '../../../data/models/post_model.dart';
 import '../../../data/datasources/mock_data_source.dart';
 import 'search_page.dart';
 import '../../scan/pages/scan_page.dart';
+import '../../profile/services/browsing_history_service.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -543,6 +544,7 @@ class _MapPageState extends State<MapPage> {
                             );
                           } else {
                             // Manual expand - override auto
+                            BrowsingHistoryService().addToHistory(post);
                             setState(() {
                               _manualExpandedIndex = index;
                               _expandedIndex = index;

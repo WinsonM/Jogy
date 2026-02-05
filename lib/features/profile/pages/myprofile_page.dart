@@ -7,6 +7,8 @@ import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/models/location_model.dart';
 import 'edit_profile_page.dart';
+import 'browsing_history_page.dart';
+import '../widgets/user_list_page.dart';
 
 class MyProfilePage extends StatefulWidget {
   const MyProfilePage({super.key});
@@ -35,6 +37,44 @@ class _MyProfilePageState extends State<MyProfilePage> {
   final int _postsCount = 42;
   final int _followersCount = 1234;
   final int _followingCount = 567;
+
+  // Mock followers list
+  final List<UserModel> _mockFollowers = const [
+    UserModel(
+      id: 'follower_1',
+      username: '小明',
+      avatarUrl: 'https://i.pravatar.cc/150?img=1',
+      bio: '热爱生活的旅行者 🌍',
+    ),
+    UserModel(
+      id: 'follower_2',
+      username: '小红',
+      avatarUrl: 'https://i.pravatar.cc/150?img=2',
+      bio: '美食博主 | 摄影爱好者',
+    ),
+    UserModel(
+      id: 'follower_3',
+      username: '张三',
+      avatarUrl: 'https://i.pravatar.cc/150?img=3',
+      bio: '程序员 | 咖啡控 ☕',
+    ),
+  ];
+
+  // Mock following list
+  final List<UserModel> _mockFollowing = const [
+    UserModel(
+      id: 'following_1',
+      username: '李四',
+      avatarUrl: 'https://i.pravatar.cc/150?img=4',
+      bio: '设计师 | 艺术爱好者',
+    ),
+    UserModel(
+      id: 'following_2',
+      username: '王五',
+      avatarUrl: 'https://i.pravatar.cc/150?img=5',
+      bio: '健身达人 💪',
+    ),
+  ];
 
   // 模拟帖子数据
   late List<PostModel> _mockPosts;
@@ -284,14 +324,42 @@ class _MyProfilePageState extends State<MyProfilePage> {
                       color: Colors.grey[300],
                       margin: const EdgeInsets.symmetric(horizontal: 24),
                     ),
-                    _buildStatItem('$_followersCount', '粉丝'),
+                    _buildStatItem(
+                      '$_followersCount',
+                      '粉丝',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => UserListPage(
+                              listType: UserListType.followers,
+                              users: _mockFollowers,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     Container(
                       height: 30,
                       width: 1,
                       color: Colors.grey[300],
                       margin: const EdgeInsets.symmetric(horizontal: 24),
                     ),
-                    _buildStatItem('$_followingCount', '关注'),
+                    _buildStatItem(
+                      '$_followingCount',
+                      '关注',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => UserListPage(
+                              listType: UserListType.following,
+                              users: _mockFollowing,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -319,12 +387,12 @@ class _MyProfilePageState extends State<MyProfilePage> {
                             left:
                                 _selectedTabIndex *
                                 (MediaQuery.of(context).size.width - 40 - 8) /
-                                    3,
+                                3,
                             top: 0,
                             bottom: 0,
                             width:
                                 (MediaQuery.of(context).size.width - 40 - 8) /
-                                    3,
+                                3,
                             child: Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -463,16 +531,20 @@ class _MyProfilePageState extends State<MyProfilePage> {
     );
   }
 
-  Widget _buildStatItem(String count, String label) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-      ],
+  Widget _buildStatItem(String count, String label, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        children: [
+          Text(
+            count,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+        ],
+      ),
     );
   }
 
@@ -585,9 +657,12 @@ class _SettingsDrawer extends StatelessWidget {
                   title: '浏览历史',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(
+                    Navigator.push(
                       context,
-                    ).showSnackBar(const SnackBar(content: Text('浏览历史功能即将推出')));
+                      MaterialPageRoute(
+                        builder: (_) => const BrowsingHistoryPage(),
+                      ),
+                    );
                   },
                 ),
                 // 联系客服
