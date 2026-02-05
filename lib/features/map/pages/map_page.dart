@@ -699,9 +699,37 @@ class _MapPageState extends State<MapPage> {
                   GestureDetector(
                     onTap: () {
                       final currentZoom = _mapController.camera.zoom;
+                      final newZoom = (currentZoom + 1).clamp(3.0, 18.0);
+
+                      LatLng targetCenter;
+                      Offset targetOffset = Offset.zero;
+
+                      // Check if there is an expanded bubble (manual or auto)
+                      // We can check _expandedIndex.
+                      // Note: We need to access the posts list to get the location.
+                      final posts = context.read<PostProvider>().posts;
+
+                      if (_expandedIndex != null &&
+                          _expandedIndex! < posts.length) {
+                        // Center on the expanded bubble
+                        final post = posts[_expandedIndex!];
+                        targetCenter = LatLng(
+                          post.location.latitude,
+                          post.location.longitude,
+                        );
+                        // Keep the specific offset so the bubble stays visually centered
+                        targetOffset = _expandedBubbleCenterOffset(
+                          _mapController.camera.size,
+                        );
+                      } else {
+                        // Default: center on screen center
+                        targetCenter = _mapController.camera.center;
+                      }
+
                       _mapController.move(
-                        _mapController.camera.center,
-                        (currentZoom + 1).clamp(3.0, 18.0),
+                        targetCenter,
+                        newZoom,
+                        offset: targetOffset,
                       );
                     },
                     child: ClipOval(
@@ -737,9 +765,31 @@ class _MapPageState extends State<MapPage> {
                   GestureDetector(
                     onTap: () {
                       final currentZoom = _mapController.camera.zoom;
+                      final newZoom = (currentZoom - 1).clamp(3.0, 18.0);
+
+                      LatLng targetCenter;
+                      Offset targetOffset = Offset.zero;
+
+                      final posts = context.read<PostProvider>().posts;
+
+                      if (_expandedIndex != null &&
+                          _expandedIndex! < posts.length) {
+                        final post = posts[_expandedIndex!];
+                        targetCenter = LatLng(
+                          post.location.latitude,
+                          post.location.longitude,
+                        );
+                        targetOffset = _expandedBubbleCenterOffset(
+                          _mapController.camera.size,
+                        );
+                      } else {
+                        targetCenter = _mapController.camera.center;
+                      }
+
                       _mapController.move(
-                        _mapController.camera.center,
-                        (currentZoom - 1).clamp(3.0, 18.0),
+                        targetCenter,
+                        newZoom,
+                        offset: targetOffset,
                       );
                     },
                     child: ClipOval(
