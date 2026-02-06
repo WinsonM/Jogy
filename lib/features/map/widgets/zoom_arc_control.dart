@@ -114,10 +114,13 @@ class _ZoomArcControlState extends State<ZoomArcControl> {
         children: [
           // Arc area
           GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanDown: (_) {}, // Claim the gesture early
             onPanStart: (d) =>
                 _handlePanStart(d.localPosition, const Size(140, 140)),
             onPanUpdate: (d) =>
                 _handlePanUpdate(d.localPosition, const Size(140, 140)),
+            onPanEnd: (_) => _lastAngle = null,
             child: CustomPaint(
               size: const Size(140, 140),
               painter: _ZoomArcPainter(
@@ -128,41 +131,37 @@ class _ZoomArcControlState extends State<ZoomArcControl> {
             ),
           ),
 
-          // Center Location Button
-          // Positioned at the geometric center of the widget (which is the center of arc curvature)
-          // Since the widget size is 140x140 and arc is centered around center,
-          // Button should be at center.
-          Positioned(
-            right: 0,
-            bottom: 0,
-            left: 0,
-            top: 0,
+          // Center Location Button - only 50x50 area receives gestures
+          Positioned.fill(
             child: Center(
-              child: GestureDetector(
-                onTap: widget.onLocationTap,
-                child: ClipOval(
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(
-                          alpha: 0.9,
-                        ), // Less transparent for button
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.my_location,
-                        color: Colors.blue[400],
-                        size: 26,
+              child: SizedBox(
+                width: 50,
+                height: 50,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onLocationTap,
+                  child: ClipOval(
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.my_location,
+                          color: Colors.blue[400],
+                          size: 26,
+                        ),
                       ),
                     ),
                   ),

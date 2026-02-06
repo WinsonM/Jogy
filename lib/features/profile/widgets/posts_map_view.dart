@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../data/models/post_model.dart';
+import '../../map/widgets/zoom_arc_control.dart';
 
 /// A map view that displays posts as markers on a map
 class PostsMapView extends StatefulWidget {
@@ -17,6 +18,7 @@ class PostsMapView extends StatefulWidget {
 class _PostsMapViewState extends State<PostsMapView> {
   late MapController _mapController;
   PostModel? _selectedPost;
+  double _currentZoom = 13.0;
 
   @override
   void initState() {
@@ -56,7 +58,15 @@ class _PostsMapViewState extends State<PostsMapView> {
               mapController: _mapController,
               options: MapOptions(
                 initialCenter: center,
-                initialZoom: 13,
+                initialZoom: _currentZoom,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                ),
+                onPositionChanged: (position, hasGesture) {
+                  if (hasGesture) {
+                    setState(() => _currentZoom = position.zoom);
+                  }
+                },
                 onTap: (_, __) {
                   setState(() => _selectedPost = null);
                 },
@@ -204,6 +214,26 @@ class _PostsMapViewState extends State<PostsMapView> {
                   ),
                 ),
               ),
+            // Zoom Arc Control - bottom right, smaller size
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: Transform.scale(
+                scale: 0.7,
+                alignment: Alignment.bottomRight,
+                child: ZoomArcControl(
+                  currentZoom: _currentZoom,
+                  onZoomChanged: (zoom) {
+                    setState(() => _currentZoom = zoom);
+                    _mapController.move(_mapController.camera.center, zoom);
+                  },
+                  onLocationTap: () {
+                    // Center on posts
+                    _mapController.move(_calculateCenter(), _currentZoom);
+                  },
+                ),
+              ),
+            ),
           ],
         ),
       ),
