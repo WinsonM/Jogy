@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/post_model.dart';
 import '../../../presentation/providers/post_provider.dart';
+import '../../profile/pages/profile_page.dart';
 
 class DetailPage extends StatefulWidget {
   final String? postId;
@@ -22,6 +23,108 @@ class _DetailPageState extends State<DetailPage> {
     super.dispose();
   }
 
+  void _showShareSheet(BuildContext context) {
+    // Mock chat contacts for sharing
+    final List<Map<String, String>> chatContacts = [
+      {'name': '小明', 'avatar': 'https://i.pravatar.cc/150?img=1'},
+      {'name': '小红', 'avatar': 'https://i.pravatar.cc/150?img=2'},
+      {'name': '张三', 'avatar': 'https://i.pravatar.cc/150?img=3'},
+      {'name': '李四', 'avatar': 'https://i.pravatar.cc/150?img=4'},
+      {'name': '王五', 'avatar': 'https://i.pravatar.cc/150?img=5'},
+      {'name': '赵六', 'avatar': 'https://i.pravatar.cc/150?img=6'},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  '分享给好友',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              SizedBox(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: chatContacts.length,
+                  itemBuilder: (context, index) {
+                    final contact = chatContacts[index];
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('已分享给 ${contact['name']}')),
+                        );
+                      },
+                      child: Container(
+                        width: 70,
+                        margin: const EdgeInsets.only(right: 12),
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundImage: NetworkImage(contact['avatar']!),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              contact['name']!,
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.copy, size: 20),
+                ),
+                title: const Text('复制链接'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('链接已复制')));
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -38,6 +141,12 @@ class _DetailPageState extends State<DetailPage> {
           style: TextStyle(color: Colors.black, fontSize: 18),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined, color: Colors.black),
+            onPressed: () => _showShareSheet(context),
+          ),
+        ],
       ),
       body: Consumer<PostProvider>(
         builder: (context, postProvider, child) {
@@ -155,35 +264,61 @@ class _DetailPageState extends State<DetailPage> {
                             // User info
                             Row(
                               children: [
-                                CircleAvatar(
-                                  radius: 20,
-                                  backgroundImage: NetworkImage(
-                                    post.user.avatarUrl,
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            ProfilePage(userId: post.user.id),
+                                      ),
+                                    );
+                                  },
+                                  child: CircleAvatar(
+                                    radius: 20,
+                                    backgroundImage: NetworkImage(
+                                      post.user.avatarUrl,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        post.user.username,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              ProfilePage(userId: post.user.id),
                                         ),
-                                      ),
-                                      Text(
-                                        _formatTime(post.createdAt),
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 12,
+                                      );
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          post.user.username,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                        Text(
+                                          _formatTime(post.createdAt),
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
+                                // Follow and Message buttons
+                                _buildFollowButton(),
+                                const SizedBox(width: 8),
+                                _buildMessageButton(),
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -457,6 +592,45 @@ class _DetailPageState extends State<DetailPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFollowButton() {
+    return GestureDetector(
+      onTap: () {
+        // TODO: Implement follow logic
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3FAAF0),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Text(
+          '关注',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageButton() {
+    return GestureDetector(
+      onTap: () {
+        // TODO: Navigate to chat page
+      },
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Icon(Icons.mail_outline, size: 18, color: Colors.grey[700]),
       ),
     );
   }
