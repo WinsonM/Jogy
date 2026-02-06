@@ -343,7 +343,7 @@ class _LoginPageState extends State<LoginPage>
           const Icon(Icons.bubble_chart_rounded, size: 64, color: primaryColor),
           const SizedBox(height: 16),
           const Text(
-            '欢迎回来',
+            'Jogy',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 28,

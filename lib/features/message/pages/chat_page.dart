@@ -134,55 +134,6 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  void _receiveMockMessage() async {
-    // Check if we are at bottom
-    if (!_scrollController.hasClients) return;
-    final currentScroll = _scrollController.offset;
-    final bool isScrolledUp = currentScroll > 50;
-
-    final newMessage = {
-      'isMe': false,
-      'type': 'text',
-      'content': '这是一条模拟的对方消息 ${_messages.length + _pendingMessages.length}',
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    };
-
-    // 1. Persist ALL messages to DB immediately (Try-catch to prevent UI freeze if DB fails)
-    try {
-      await DatabaseHelper().insertMessage(newMessage);
-    } catch (e) {
-      debugPrint('DB Insert Error: $e');
-    }
-
-    setState(() {
-      if (isScrolledUp) {
-        // Buffer the message! Do NOT add to main list.
-        _pendingMessages.add(newMessage);
-        _showScrollButton = true;
-      } else {
-        // At bottom: Add directly to index 0 (newest)
-        _messages.insert(0, newMessage);
-        // Scroll to 0.0 to keep visually stable (though layout might twitch slightly, it's better than logic jump)
-        // Actually, if we are at 0.0, inserting at 0 pushes content up.
-        // Wait, native flutter reverse list: inserting at 0 pushes old content UP.
-        // The viewport stays at 0.0 (showing new item).
-        // This IS the jump the user wanted to avoid?
-        // "消息列表不动" -> "Interface stays unchanged".
-        // So standard list ADDING to bottom is stable.
-        // Reverse list INSERTING at 0 moves everything?
-        // NO. Reverse list: Viewport is anchored to 0.0.
-        // Inserting at 0 means old 0 becomes 1.
-        // The content at 0.0 changes from OldMsg to NewMsg.
-        // So visually: The content CHANGES.
-        // The user wants "Interface unchanged".
-        // The ONLY way to do that is BUFFERING (which we do if isScrolledUp).
-        // BUT if !isScrolledUp (at bottom), standard behavior is to show new message.
-        // So this logic is correct.
-        _scrollToBottom();
-      }
-    });
-  }
-
   void _handleScrollButtonTap() {
     // When tapping button:
     // 1. Merge all pending messages
@@ -442,12 +393,8 @@ class _ChatPageState extends State<ChatPage> {
           ],
         ),
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.bug_report_outlined, color: Colors.grey),
-          onPressed: _receiveMockMessage, // Simulation trigger
-        ),
-        const SizedBox(width: 16),
+      actions: const [
+        SizedBox(width: 56), // Balance the leading width
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1.0),

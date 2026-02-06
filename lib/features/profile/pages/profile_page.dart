@@ -7,6 +7,7 @@ import '../../../data/models/location_model.dart';
 import '../widgets/posts_timeline.dart';
 import '../widgets/user_list_page.dart';
 import '../widgets/posts_map_view.dart';
+import '../widgets/posts_grid_view.dart';
 import '../../detail/pages/detail_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -47,9 +48,6 @@ class _ProfilePageState extends State<ProfilePage> {
   final GlobalKey _scrollTabKey = GlobalKey();
   final GlobalKey _pinnedTabKey = GlobalKey();
   double _pinnedTabY = 0.0;
-
-  // 模拟帖子数据
-  late List<PostModel> _mockPosts;
 
   // 模拟统计数据
   final int _postsCount = 42;
@@ -94,6 +92,11 @@ class _ProfilePageState extends State<ProfilePage> {
     ),
   ];
 
+  // 模拟帖子数据
+  late List<PostModel> _mockPosts;
+  late List<PostModel> _likedPosts;
+  late List<PostModel> _favoritedPosts;
+
   // 头部展开时的高度（头像 + 名字 + bio + 按钮区域）
   static const double _expandedHeaderHeight = 260.0;
 
@@ -112,6 +115,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
     // 初始化模拟数据
     _mockPosts = _generateMockPosts();
+    _likedPosts = _generateLikedPosts();
+    _favoritedPosts = _generateFavoritedPosts();
 
     // 首帧后获取固定 Tab 的目标位置
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -842,31 +847,186 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         );
       case 1: // 喜欢
+        return _buildPostsWithToggle(_likedPosts);
       case 2: // 收藏
+        return _buildPostsWithToggle(_favoritedPosts);
       default:
-        // 其他 tab 暂时显示占位 GridView
-        return GridView.builder(
-          padding: const EdgeInsets.all(2),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-            childAspectRatio: 1,
-          ),
-          itemCount: 12,
-          itemBuilder: (context, index) {
-            final seed = _selectedTabIndex * 100 + index;
-            return Container(
-              color: Colors.grey[200],
-              child: Image.network(
-                'https://picsum.photos/200/200?random=$seed',
-                fit: BoxFit.cover,
-              ),
-            );
-          },
-        );
+        return const SizedBox.shrink();
     }
+  }
+
+  /// 生成喜欢的帖子
+  List<PostModel> _generateLikedPosts() {
+    final now = DateTime.now();
+    return [
+      PostModel(
+        id: 'liked_post_1',
+        user: const UserModel(
+          id: 'user_a',
+          username: '摄影师小王',
+          avatarUrl: 'https://i.pravatar.cc/150?img=10',
+          bio: '摄影爱好者',
+        ),
+        location: const LocationModel(latitude: 31.24, longitude: 121.48),
+        content: '城市夜景 🌃',
+        imageUrls: const ['https://picsum.photos/200/200?random=201'],
+        createdAt: now.subtract(const Duration(hours: 5)),
+        isLiked: true,
+      ),
+      PostModel(
+        id: 'liked_post_2',
+        user: const UserModel(
+          id: 'user_b',
+          username: '美食家小李',
+          avatarUrl: 'https://i.pravatar.cc/150?img=11',
+          bio: '美食博主',
+        ),
+        location: const LocationModel(latitude: 31.22, longitude: 121.46),
+        content: '今天的下午茶 ☕🍰',
+        imageUrls: const ['https://picsum.photos/200/200?random=202'],
+        createdAt: now.subtract(const Duration(days: 1)),
+        isLiked: true,
+      ),
+    ];
+  }
+
+  /// 生成收藏的帖子
+  List<PostModel> _generateFavoritedPosts() {
+    final now = DateTime.now();
+    return [
+      PostModel(
+        id: 'fav_post_1',
+        user: const UserModel(
+          id: 'user_d',
+          username: '健身教练小张',
+          avatarUrl: 'https://i.pravatar.cc/150?img=20',
+          bio: '健身达人',
+        ),
+        location: const LocationModel(latitude: 31.21, longitude: 121.44),
+        content: '今日训练打卡 💪',
+        imageUrls: const ['https://picsum.photos/200/200?random=301'],
+        createdAt: now.subtract(const Duration(hours: 8)),
+        isFavorited: true,
+      ),
+      PostModel(
+        id: 'fav_post_2',
+        user: const UserModel(
+          id: 'user_e',
+          username: '程序员老陈',
+          avatarUrl: 'https://i.pravatar.cc/150?img=21',
+          bio: '代码人生',
+        ),
+        location: const LocationModel(latitude: 31.26, longitude: 121.52),
+        content: '深夜码代码的日常 💻',
+        imageUrls: const ['https://picsum.photos/200/200?random=302'],
+        createdAt: now.subtract(const Duration(days: 3)),
+        isFavorited: true,
+      ),
+    ];
+  }
+
+  /// 构建带有列表/地图切换的帖子视图
+  Widget _buildPostsWithToggle(List<PostModel> posts) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () => setState(() => _isMapView = false),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: !_isMapView ? Colors.black : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.view_list,
+                        size: 16,
+                        color: !_isMapView ? Colors.white : Colors.grey[700],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '列表',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: !_isMapView ? Colors.white : Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _isMapView = true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _isMapView ? Colors.black : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.map,
+                        size: 16,
+                        color: _isMapView ? Colors.white : Colors.grey[700],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '地图',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _isMapView ? Colors.white : Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_isMapView)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: PostsMapView(
+              posts: posts,
+              onPostTap: (post) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DetailPage(postId: post.id),
+                  ),
+                );
+              },
+            ),
+          )
+        else
+          PostsGridView(
+            posts: posts,
+            onPostTap: (post) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => DetailPage(postId: post.id)),
+              );
+            },
+          ),
+        if (_isMapView) const SizedBox(height: 25),
+      ],
+    );
   }
 }
