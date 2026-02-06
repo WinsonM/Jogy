@@ -6,6 +6,8 @@ import '../../../data/models/user_model.dart';
 import '../../../data/models/location_model.dart';
 import '../widgets/posts_timeline.dart';
 import '../widgets/user_list_page.dart';
+import '../widgets/posts_map_view.dart';
+import '../../detail/pages/detail_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? userId;
@@ -36,6 +38,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late String _bio;
   late String _gender;
   int _selectedTabIndex = 0; // 0: 发布, 1: 喜欢, 2: 收藏
+  bool _isMapView = false; // Toggle between timeline and map view
 
   // 滚动控制器和状态
   final ScrollController _scrollController = ScrollController();
@@ -727,11 +730,116 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildTabContent() {
     switch (_selectedTabIndex) {
       case 0: // 发布
-        return PostsTimeline(
-          posts: _mockPosts,
-          onPostTap: (post) {
-            // TODO: 导航到帖子详情页
-          },
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // View toggle button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => setState(() => _isMapView = false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: !_isMapView ? Colors.black : Colors.grey[200],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.view_list,
+                            size: 16,
+                            color: !_isMapView
+                                ? Colors.white
+                                : Colors.grey[700],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '时间',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: !_isMapView
+                                  ? Colors.white
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() => _isMapView = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _isMapView ? Colors.black : Colors.grey[200],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.map,
+                            size: 16,
+                            color: _isMapView ? Colors.white : Colors.grey[700],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '地图',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _isMapView
+                                  ? Colors.white
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content based on view mode
+            if (_isMapView)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: PostsMapView(
+                  posts: _mockPosts,
+                  onPostTap: (post) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DetailPage(postId: post.id),
+                      ),
+                    );
+                  },
+                ),
+              )
+            else
+              PostsTimeline(
+                posts: _mockPosts,
+                onPostTap: (post) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DetailPage(postId: post.id),
+                    ),
+                  );
+                },
+              ),
+            if (_isMapView) const SizedBox(height: 0), // 调整这里的高度值
+          ],
         );
       case 1: // 喜欢
       case 2: // 收藏
