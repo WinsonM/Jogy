@@ -22,7 +22,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3, // Upgrade version
+      version: 4, // Upgrade version
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -54,6 +54,17 @@ class DatabaseHelper {
     if (oldVersion < 3) {
       await _createPostDraftsTable(db);
     }
+    if (oldVersion < 4) {
+      // Add location columns to post_drafts
+      await db.execute('ALTER TABLE post_drafts ADD COLUMN location_lat REAL');
+      await db.execute('ALTER TABLE post_drafts ADD COLUMN location_lng REAL');
+      await db.execute(
+        'ALTER TABLE post_drafts ADD COLUMN location_place_name TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE post_drafts ADD COLUMN location_address TEXT',
+      );
+    }
   }
 
   Future<void> _createChatSessionsTable(Database db) async {
@@ -74,7 +85,12 @@ class DatabaseHelper {
         content TEXT,
         image_paths TEXT, -- JSON encoded list of strings
         type TEXT,
-        timestamp INTEGER
+        type TEXT,
+        timestamp INTEGER,
+        location_lat REAL,
+        location_lng REAL,
+        location_place_name TEXT,
+        location_address TEXT
       )
     ''');
   }
@@ -155,6 +171,10 @@ class DatabaseHelper {
       'image_paths': draft['image_paths'], // Should be JSON string
       'type': draft['type'],
       'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'location_lat': draft['location_lat'],
+      'location_lng': draft['location_lng'],
+      'location_place_name': draft['location_place_name'],
+      'location_address': draft['location_address'],
     });
   }
 

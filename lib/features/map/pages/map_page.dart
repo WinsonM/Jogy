@@ -23,6 +23,8 @@ import '../../../data/datasources/mock_data_source.dart';
 import 'search_page.dart';
 import '../../scan/pages/scan_page.dart';
 import '../../profile/services/browsing_history_service.dart';
+import 'location_picker_page.dart';
+import '../../../data/models/location_model.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -1023,6 +1025,11 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
 
+  // Location state
+  LocationModel? _currentLocation;
+  bool _isLocationLoading = true;
+  bool _hasManualLocation = false;
+
   Future<void> _pickPostImage() async {
     try {
       final List<XFile> images = await ImagePicker().pickMultiImage();
@@ -1046,6 +1053,74 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
   void initState() {
     super.initState();
     _loadDraft();
+    _initLocation();
+  }
+
+  Future<void> _initLocation() async {
+    try {
+      // 获取当前位置
+      final currentPos = await Geolocator.getCurrentPosition();
+
+      if (!mounted) return;
+      if (_hasManualLocation) {
+        if (_isLocationLoading) {
+          setState(() => _isLocationLoading = false);
+        }
+        return;
+      }
+
+      // 模拟逆地理编码 (因为 geocoding 包可能需要配置 key 或者原生集成)
+      // 使用简单的 Mock 逻辑，基于坐标生成"真实"的模拟地址
+      String address = '未知位置';
+      String placeName = '选择位置';
+
+      // 简单模拟: 根据经纬度的小数位生成不同的"街道"
+      final lastDigit = (currentPos.latitude * 10000).toInt() % 10;
+      if (lastDigit % 2 == 0) {
+        placeName = '未来科技城';
+        address = '文一西路 999 号';
+      } else {
+        placeName = '梦想小镇';
+        address = '良睦路 1399 号';
+      }
+
+      setState(() {
+        _currentLocation = LocationModel(
+          latitude: currentPos.latitude,
+          longitude: currentPos.longitude,
+          placeName: placeName,
+          address: address,
+        );
+        _isLocationLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLocationLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickLocation() async {
+    if (_currentLocation == null) return;
+
+    final result = await Navigator.push<LocationModel>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerPage(
+          initialLat: _currentLocation!.latitude,
+          initialLng: _currentLocation!.longitude,
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        _currentLocation = result;
+        _hasManualLocation = true;
+      });
+    }
   }
 
   Future<void> _loadDraft() async {
@@ -1072,6 +1147,19 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
         } else {
           _isImageMode = true;
         }
+
+        // Restore location
+        if (draft['location_lat'] != null && draft['location_lng'] != null) {
+          _currentLocation = LocationModel(
+            latitude: draft['location_lat'],
+            longitude: draft['location_lng'],
+            placeName: draft['location_place_name'],
+            address: draft['location_address'],
+          );
+          _hasManualLocation = true;
+          _isLocationLoading =
+              false; // Override auto-location loading if draft has location
+        }
       });
     }
   }
@@ -1083,6 +1171,10 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
       'content': _contentController.text,
       'image_paths': jsonEncode(imagePaths),
       'type': _isImageMode ? 'bubble' : 'broadcast',
+      'location_lat': _currentLocation?.latitude,
+      'location_lng': _currentLocation?.longitude,
+      'location_place_name': _currentLocation?.placeName,
+      'location_address': _currentLocation?.address,
     });
   }
 
@@ -1123,7 +1215,13 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
     if (shouldSave == null) return; // Dismissed
 
     if (shouldSave) {
-      await _saveDraft();
+      try {
+        await _saveDraft();
+      } catch (e) {
+        debugPrint('Error saving draft: $e');
+        // Even if save fails, we should probably close or show toast.
+        // For now, allow closing.
+      }
     } else {
       await _deleteDraft();
     }
@@ -1349,6 +1447,54 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
                     ),
                     style: const TextStyle(fontSize: 16),
                   ),
+
+                  // Location Bubble (New)
+                  if (!_isLocationLoading)
+                    GestureDetector(
+                      onTap: _pickLocation,
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.grey[300]!),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.location_on,
+                              size: 16,
+                              color: Color(0xFF3FAAF0),
+                            ),
+                            const SizedBox(width: 4),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 200),
+                              child: Text(
+                                _currentLocation?.placeName ?? '点击选择位置',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 12,
+                              color: Colors.grey[400],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   // Retention duration selector (only in text mode)
                   if (!_isImageMode) ...[
                     const SizedBox(height: 24),

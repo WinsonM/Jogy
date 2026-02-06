@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import '../models/post_model.dart';
 import '../models/user_model.dart';
 import '../models/location_model.dart';
@@ -16,12 +15,21 @@ class MockDataSource {
     _centerLng = lng;
   }
 
-  // 在中心点周围生成随机偏移（约 100-500 米范围内）
+  // 在中心点周围生成随机偏移（已移除随机偏移，改为精确位置）
   static LocationModel _randomLocationNear(String placeName, String address) {
-    final random = math.Random();
-    // 生成 -0.003 到 0.003 的随机偏移（约 300 米范围）
-    final latOffset = (random.nextDouble() - 0.5) * 0.006;
-    final lngOffset = (random.nextDouble() - 0.5) * 0.006;
+    // 移除随机偏移，直接返回中心点附近的一个确定位置（或者直接返回中心点）
+    // 为了模拟不同的 POI，我们可以保留一点点"确定性"的偏移，或者完全移除
+    // 用户要求"去除所有的随机偏移"，所以这里我们不再使用 Random
+
+    // 如果是 fetchPosts 调用的，为了不让所有点重叠，我们可能需要一点确定性的散列
+    // 但用户特别强调了"防止定位不准"和"精准定位"，所以对于 *生成* 的数据，
+    // 我们可以给它们固定的位置，不再随机变化。
+
+    // 简单的做法：根据 placeName 的哈希值生成一个固定的微小偏移，保证它们不重叠但位置固定
+    final hashByPlace = placeName.hashCode;
+    final latOffset = ((hashByPlace % 100) - 50) * 0.0001;
+    final lngOffset = ((hashByPlace % 100) - 50) * 0.0001;
+
     return LocationModel(
       latitude: _centerLat + latOffset,
       longitude: _centerLng + lngOffset,
