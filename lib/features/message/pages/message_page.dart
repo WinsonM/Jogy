@@ -30,7 +30,19 @@ class MessagePage extends StatefulWidget {
 class _MessagePageState extends State<MessagePage>
     with TickerProviderStateMixin {
   late List<MessageItem> _messages;
-  late List<SlidableController> _controllers;
+  final Map<int, SlidableController> _controllersById = {};
+  bool _isSearching = false;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+
+  List<MessageItem> get _filteredMessages {
+    if (_searchQuery.isEmpty) return _messages;
+    final query = _searchQuery.toLowerCase();
+    return _messages
+        .where((m) => m.userName.toLowerCase().contains(query))
+        .toList();
+  }
 
   @override
   void initState() {
@@ -44,16 +56,19 @@ class _MessagePageState extends State<MessagePage>
         unreadCount: (index * 7 + 3) % 50,
       );
     });
-
-    // Initialize controllers for each item
-    _controllers = List.generate(10, (index) => SlidableController(this));
+    // Initialize controllers for each item (stable by id)
+    for (final item in _messages) {
+      _controllersById[item.id] = SlidableController(this);
+    }
   }
 
   @override
   void dispose() {
-    for (var controller in _controllers) {
+    for (var controller in _controllersById.values) {
       controller.dispose();
     }
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -70,12 +85,14 @@ class _MessagePageState extends State<MessagePage>
     });
   }
 
-  void _deleteMessage(MessageItem item, int index) {
+  void _deleteMessage(MessageItem item) {
+    final index = _messages.indexWhere((m) => m.id == item.id);
+    if (index == -1) return;
     setState(() {
       _messages.removeAt(index);
       // Remove controller corresponding to deleted item
-      _controllers[index].dispose();
-      _controllers.removeAt(index);
+      final controller = _controllersById.remove(item.id);
+      controller?.dispose();
     });
   }
 
@@ -83,7 +100,7 @@ class _MessagePageState extends State<MessagePage>
   // Returns true if an action pane was closed, false otherwise
   bool _closeOpenSlidables() {
     bool closed = false;
-    for (var controller in _controllers) {
+    for (var controller in _controllersById.values) {
       // Check if pane is open (ActionPaneType.end in our case)
       if (controller.actionPaneType.value != ActionPaneType.none) {
         controller.close();
@@ -91,6 +108,13 @@ class _MessagePageState extends State<MessagePage>
       }
     }
     return closed;
+  }
+
+  SlidableController _controllerFor(MessageItem item) {
+    return _controllersById.putIfAbsent(
+      item.id,
+      () => SlidableController(this),
+    );
   }
 
   @override
@@ -130,14 +154,14 @@ class _MessagePageState extends State<MessagePage>
                   left: 16,
                   right: 16,
                 ),
-                itemCount: _messages.length,
+                itemCount: _filteredMessages.length,
                 separatorBuilder: (c, i) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
-                  final item = _messages[index];
+                  final item = _filteredMessages[index];
 
                   return Slidable(
                     key: ValueKey(item.id),
-                    controller: _controllers[index],
+                    controller: _controllerFor(item),
                     // Disable automatic closing group tag to handle manually
                     groupTag: 'message_list',
                     endActionPane: ActionPane(
@@ -157,7 +181,7 @@ class _MessagePageState extends State<MessagePage>
                         // Delete Button
                         CustomSlidableAction(
                           onPressed: (context) {
-                            _deleteMessage(item, index);
+                            _deleteMessage(item);
                           },
                           backgroundColor: Colors.transparent,
                           foregroundColor: Colors.white,
@@ -276,40 +300,34 @@ class _MessagePageState extends State<MessagePage>
                 },
               ),
             ),
-            // Fixed Title Button
+            // Fixed Title Button / Search Box
             Positioned(
               top: topPadding + 12,
               left: 16,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(25),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
+              right: 16,
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  AnimatedOpacity(
+                    opacity: _isSearching ? 1 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: IgnorePointer(
+                      ignoring: !_isSearching,
+                      child: _buildSearchField(),
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(153),
-                      borderRadius: BorderRadius.circular(25),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(20),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Text(
-                      '消息',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 24,
+                  ),
+                  AnimatedOpacity(
+                    opacity: _isSearching ? 0 : 1,
+                    duration: const Duration(milliseconds: 200),
+                    child: IgnorePointer(
+                      ignoring: _isSearching,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildTitleButton(),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ],
@@ -335,6 +353,111 @@ class _MessagePageState extends State<MessagePage>
               color: Colors.transparent,
               child: Icon(icon, color: color, size: 24),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitleButton() {
+    return GestureDetector(
+      onTap: () {
+        setState(() => _isSearching = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _searchFocusNode.requestFocus();
+        });
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(153),
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(20),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Text(
+                  '消息',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                  ),
+                ),
+                SizedBox(width: 8),
+                Icon(Icons.search, color: Colors.grey, size: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: Colors.white.withAlpha(200),
+            borderRadius: BorderRadius.circular(25),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(20),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 16),
+              const Icon(Icons.search, color: Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  onChanged: (value) {
+                    setState(() => _searchQuery = value);
+                  },
+                  decoration: const InputDecoration(
+                    hintText: '搜索聊天',
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.grey),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() {
+                    _searchQuery = '';
+                    _isSearching = false;
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  });
+                },
+              ),
+            ],
           ),
         ),
       ),

@@ -14,6 +14,7 @@ import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../widgets/map_bubble.dart';
+import '../widgets/zoom_arc_control.dart'; // Import ZoomArcControl
 import '../../detail/pages/detail_page.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../../config/map_config.dart';
@@ -30,7 +31,7 @@ class MapPage extends StatefulWidget {
   State<MapPage> createState() => _MapPageState();
 }
 
-class _MapPageState extends State<MapPage> {
+class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
   // 以屏幕几何中心为基准的 Y 方向偏移（尖角位置）。
   // 0 表示尖角在屏幕垂直正中心；负值整体往上移，正值整体往下移。
@@ -43,6 +44,7 @@ class _MapPageState extends State<MapPage> {
   int? _suppressedAutoIndex; // Prevent immediate auto re-expand after collapse
   bool _autoExpandDisabled = false; // Disable auto-expand until user drags
   double _mapRotation = 0.0; // 地图旋转角度（弧度）
+  double _currentZoom = 15.0; // 当前缩放级别，默认为 15.0
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -495,6 +497,10 @@ class _MapPageState extends State<MapPage> {
                   if (_mapRotation != newRotation) {
                     setState(() => _mapRotation = newRotation);
                   }
+                  // Update current zoom
+                  if (_currentZoom != event.camera.zoom) {
+                    setState(() => _currentZoom = event.camera.zoom);
+                  }
                   // Update scale factors when map moves
                   _updateScaleFactors(event.camera);
                 },
@@ -688,139 +694,58 @@ class _MapPageState extends State<MapPage> {
                 ],
               ),
             ),
-            // 缩放控制按钮 - Moved to end of Stack to ensure visibility
+            // 缩放控制按钮 - New Zoom Arc Control
             Positioned(
-              right: 16,
-              bottom: 160, // Lowered as requested
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 放大按钮
-                  GestureDetector(
-                    onTap: () {
-                      final currentZoom = _mapController.camera.zoom;
-                      final newZoom = (currentZoom + 1).clamp(3.0, 18.0);
+              right: -10,
+              bottom: 90, // Tucked into corner
+              child: ZoomArcControl(
+                currentZoom: _currentZoom,
+                minZoom: 3.0,
+                maxZoom: 18.0,
+                onZoomChanged: (newZoom) {
+                  LatLng targetCenter;
+                  Offset targetOffset = Offset.zero;
 
-                      LatLng targetCenter;
-                      Offset targetOffset = Offset.zero;
+                  final posts = context.read<PostProvider>().posts;
 
-                      // Check if there is an expanded bubble (manual or auto)
-                      // We can check _expandedIndex.
-                      // Note: We need to access the posts list to get the location.
-                      final posts = context.read<PostProvider>().posts;
+                  if (_expandedIndex != null &&
+                      _expandedIndex! < posts.length) {
+                    final post = posts[_expandedIndex!];
+                    targetCenter = LatLng(
+                      post.location.latitude,
+                      post.location.longitude,
+                    );
+                    targetOffset = _expandedBubbleCenterOffset(
+                      _mapController.camera.size,
+                    );
+                  } else {
+                    targetCenter = _mapController.camera.center;
+                  }
 
-                      if (_expandedIndex != null &&
-                          _expandedIndex! < posts.length) {
-                        // Center on the expanded bubble
-                        final post = posts[_expandedIndex!];
-                        targetCenter = LatLng(
-                          post.location.latitude,
-                          post.location.longitude,
-                        );
-                        // Keep the specific offset so the bubble stays visually centered
-                        targetOffset = _expandedBubbleCenterOffset(
-                          _mapController.camera.size,
-                        );
-                      } else {
-                        // Default: center on screen center
-                        targetCenter = _mapController.camera.center;
-                      }
-
-                      _mapController.move(
-                        targetCenter,
-                        newZoom,
-                        offset: targetOffset,
-                      );
-                    },
-                    child: ClipOval(
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(
-                              alpha: 0.6,
-                            ), // 60% 不透明度
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            size: 28,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 缩小按钮
-                  GestureDetector(
-                    onTap: () {
-                      final currentZoom = _mapController.camera.zoom;
-                      final newZoom = (currentZoom - 1).clamp(3.0, 18.0);
-
-                      LatLng targetCenter;
-                      Offset targetOffset = Offset.zero;
-
-                      final posts = context.read<PostProvider>().posts;
-
-                      if (_expandedIndex != null &&
-                          _expandedIndex! < posts.length) {
-                        final post = posts[_expandedIndex!];
-                        targetCenter = LatLng(
-                          post.location.latitude,
-                          post.location.longitude,
-                        );
-                        targetOffset = _expandedBubbleCenterOffset(
-                          _mapController.camera.size,
-                        );
-                      } else {
-                        targetCenter = _mapController.camera.center;
-                      }
-
-                      _mapController.move(
-                        targetCenter,
-                        newZoom,
-                        offset: targetOffset,
-                      );
-                    },
-                    child: ClipOval(
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(
-                              alpha: 0.6,
-                            ), // 60% 不透明度
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.remove,
-                            size: 28,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                  _mapController.move(
+                    targetCenter,
+                    newZoom,
+                    offset: targetOffset,
+                  );
+                },
+                onLocationTap: () {
+                  // Immediate animated move if we have a location
+                  if (_userLocation != null) {
+                    _animatedMapMove(_userLocation!, 15);
+                  }
+                  // Refresh location and posts in background
+                  _getCurrentLocation().then((_) {
+                    // If location changed significantly, we might want to move again or just let it update state.
+                    // For now, if userLocation was null (first time), move to it.
+                    if (_userLocation != null && !mounted) return;
+                    // Only auto-move if we weren't already at a valid location or if we want to snap?
+                    // Usually explicit user tap should snap.
+                    if (_userLocation != null) {
+                      // Don't force move again if we already moved, unless it was null.
+                      // Actually, let's just let the first move handle it, or update if it was null.
+                    }
+                  });
+                },
               ),
             ),
           ],
@@ -962,6 +887,52 @@ class _MapPageState extends State<MapPage> {
     } catch (e) {
       // Intentionally no system prompt for a cleaner UI.
     }
+  }
+
+  // Animated Map Move
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    // Create some tweens. These serve to split up the transition from one location to another.
+    // In our case, we want to split the degrees diff along each of the Lat and Lng axes.
+    final latTween = Tween<double>(
+      begin: _mapController.camera.center.latitude,
+      end: destLocation.latitude,
+    );
+    final lngTween = Tween<double>(
+      begin: _mapController.camera.center.longitude,
+      end: destLocation.longitude,
+    );
+    final zoomTween = Tween<double>(
+      begin: _mapController.camera.zoom,
+      end: destZoom,
+    );
+
+    // Create a controller that plays a curve over a duration
+    var controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    // The animation determines what path the animation will take. You can try different Curves values, although easeOutFastLinear is what I like.
+    Animation<double> animation = CurvedAnimation(
+      parent: controller,
+      curve: Curves.fastOutSlowIn,
+    );
+
+    controller.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        controller.dispose();
+      } else if (status == AnimationStatus.dismissed) {
+        controller.dispose();
+      }
+    });
+
+    controller.forward();
   }
 }
 
