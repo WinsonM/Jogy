@@ -68,8 +68,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
         final croppedFile = await ImageCropper().cropImage(
           sourcePath: image.path,
           aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Lock 1:1
-          aspectRatioPresets: const [CropAspectRatioPreset.square],
-          cropStyle: CropStyle.circle,
           compressQuality: 90,
           uiSettings: [
             AndroidUiSettings(

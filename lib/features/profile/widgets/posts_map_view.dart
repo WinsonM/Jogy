@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../data/models/post_model.dart';
 import '../../map/widgets/zoom_arc_control.dart';
+import '../../../config/map_config.dart';
 
 /// A map view that displays posts as markers on a map
 class PostsMapView extends StatefulWidget {
@@ -73,7 +74,7 @@ class _PostsMapViewState extends State<PostsMapView> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate: MapConfig.tileUrl,
                   userAgentPackageName: 'com.jogy.app',
                 ),
                 MarkerLayer(

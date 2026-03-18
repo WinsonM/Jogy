@@ -4,6 +4,8 @@ import '../models/post_model.dart';
 import '../datasources/mock_data_source.dart';
 
 class PostRepositoryImpl implements PostRepository {
+  PostRepositoryImpl();
+
   @override
   Future<List<PostModel>> getPosts() async {
     return await MockDataSource.fetchPosts();
@@ -20,18 +22,8 @@ class PostRepositoryImpl implements PostRepository {
     required double longitude,
     double radiusInKm = 10.0,
   }) async {
-    final allPosts = await getPosts();
-
-    // Filter posts within radius using Haversine formula
-    return allPosts.where((post) {
-      final distance = _calculateDistance(
-        latitude,
-        longitude,
-        post.location.latitude,
-        post.location.longitude,
-      );
-      return distance <= radiusInKm;
-    }).toList();
+    // 模拟根据位置获取帖子（暂时直接返回所有帖子）
+    return await MockDataSource.fetchPosts();
   }
 
   // Calculate distance between two points in kilometers using Haversine formula
