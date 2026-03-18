@@ -4,8 +4,12 @@ import 'package:provider/provider.dart';
 import 'features/home/home_wrapper.dart';
 import 'data/repositories/post_repository_impl.dart';
 import 'presentation/providers/post_provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
+  
   runApp(
     ChangeNotifierProvider(
       create: (_) => PostProvider(PostRepositoryImpl())..fetchPosts(),

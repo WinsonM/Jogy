@@ -1,8 +1,10 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 /// 地图配置文件
 /// 请在此处配置你的地图 API key
 class MapConfig {
-  // Mapbox API Key
-  static const String mapboxApiKey = '[REDACTED_LEAKED_MAPBOX_TOKEN]';
+  // Mapbox API Key fetched from .env
+  static String get mapboxApiKey => dotenv.env['MAPBOX_API_KEY'] ?? '';
 
   // Mapbox 日间模式 (Streets)
   static String get tileUrl =>
