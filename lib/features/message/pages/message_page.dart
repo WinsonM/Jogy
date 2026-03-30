@@ -37,6 +37,8 @@ class _MessagePageState extends State<MessagePage>
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
+  double _savedScrollOffset = 0.0;
 
   List<MessageItem> get _filteredMessages {
     if (_searchQuery.isEmpty) return _messages;
@@ -79,6 +81,7 @@ class _MessagePageState extends State<MessagePage>
     }
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -159,6 +162,7 @@ class _MessagePageState extends State<MessagePage>
               },
               blendMode: BlendMode.dstIn,
               child: ListView.separated(
+                controller: _scrollController,
                 padding: EdgeInsets.only(
                   top: topPadding + 80,
                   bottom: 120,
@@ -384,6 +388,7 @@ class _MessagePageState extends State<MessagePage>
   Widget _buildTitleButton() {
     return GestureDetector(
       onTap: () {
+        _savedScrollOffset = _scrollController.offset;
         setState(() => _isSearching = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -476,6 +481,9 @@ class _MessagePageState extends State<MessagePage>
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (!mounted) return;
                     FocusManager.instance.primaryFocus?.unfocus();
+                    if (_scrollController.hasClients) {
+                      _scrollController.jumpTo(_savedScrollOffset);
+                    }
                   });
                 },
               ),
