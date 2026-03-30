@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../data/models/post_model.dart';
-import '../../map/widgets/zoom_arc_control.dart';
+import '../../map/widgets/zoom_arc_control.dart' show LocationButton;
 import '../../../config/map_config.dart';
 
 /// A map view that displays posts as markers on a map
@@ -256,23 +256,14 @@ class _PostsMapViewState extends State<PostsMapView>
                   ),
                 ),
               ),
-            // Zoom Arc Control - bottom right, smaller size
+            // 定位按钮
             Positioned(
-              right: 8,
-              bottom: 8,
-              child: Transform.scale(
-                scale: 0.7,
-                alignment: Alignment.bottomRight,
-                child: ZoomArcControl(
-                  currentZoom: _currentZoom,
-                  onZoomChanged: (zoom) {
-                    setState(() => _currentZoom = zoom);
-                    _mapController.move(_mapController.camera.center, zoom);
-                  },
-                  onLocationTap: () {
-                    _animatedMapMove(_calculateCenter(), _currentZoom);
-                  },
-                ),
+              right: 12,
+              bottom: 12,
+              child: LocationButton(
+                onTap: () {
+                  _animatedMapMove(_calculateCenter(), _currentZoom);
+                },
               ),
             ),
           ],

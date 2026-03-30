@@ -14,7 +14,7 @@ import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../widgets/map_bubble.dart';
-import '../widgets/zoom_arc_control.dart'; // Import ZoomArcControl
+import '../widgets/zoom_arc_control.dart';
 import '../../detail/pages/detail_page.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../../config/map_config.dart';
@@ -696,41 +696,12 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            // 缩放控制按钮 - New Zoom Arc Control
+            // 定位按钮
             Positioned(
-              right: -10,
-              bottom: 90, // Tucked into corner
-              child: ZoomArcControl(
-                currentZoom: _currentZoom,
-                minZoom: 3.0,
-                maxZoom: 18.0,
-                onZoomChanged: (newZoom) {
-                  LatLng targetCenter;
-                  Offset targetOffset = Offset.zero;
-
-                  final posts = context.read<PostProvider>().posts;
-
-                  if (_expandedIndex != null &&
-                      _expandedIndex! < posts.length) {
-                    final post = posts[_expandedIndex!];
-                    targetCenter = LatLng(
-                      post.location.latitude,
-                      post.location.longitude,
-                    );
-                    targetOffset = _expandedBubbleCenterOffset(
-                      _mapController.camera.size,
-                    );
-                  } else {
-                    targetCenter = _mapController.camera.center;
-                  }
-
-                  _mapController.move(
-                    targetCenter,
-                    newZoom,
-                    offset: targetOffset,
-                  );
-                },
-                onLocationTap: () {
+              right: 16,
+              bottom: 150,
+              child: LocationButton(
+                onTap: () {
                   if (_userLocation != null) {
                     _animatedMapMove(_userLocation!, 15);
                   }
