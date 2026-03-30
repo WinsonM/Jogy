@@ -15,8 +15,25 @@ class HomeWrapper extends StatefulWidget {
 
 class _HomeWrapperState extends State<HomeWrapper> {
   int _currentIndex = 0;
+  int _messageUnreadCount = 0;
 
-  final List<Widget> _pages = const [MapPage(), MessagePage(), MyProfilePage()];
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      const MapPage(),
+      MessagePage(
+        onUnreadCountChanged: (count) {
+          if (_messageUnreadCount != count) {
+            setState(() => _messageUnreadCount = count);
+          }
+        },
+      ),
+      const MyProfilePage(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +43,7 @@ class _HomeWrapperState extends State<HomeWrapper> {
       bottomNavigationBar: GlassBottomNavBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
+        messageBadgeCount: _messageUnreadCount,
       ),
     );
   }

@@ -5,12 +5,14 @@ class GlassBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final VoidCallback? onMyTap;
+  final int messageBadgeCount;
 
   const GlassBottomNavBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
     this.onMyTap,
+    this.messageBadgeCount = 0,
   });
 
   @override
@@ -92,6 +94,7 @@ class GlassBottomNavBar extends StatelessWidget {
                             outlinedIcon: Icons.chat_bubble_outline,
                             label: '消息',
                             isSelected: currentIndex == 1,
+                            badgeCount: messageBadgeCount,
                           ),
                           // "我的"按钮
                           _buildNavItem(
@@ -121,6 +124,7 @@ class GlassBottomNavBar extends StatelessWidget {
     required String label,
     required bool isSelected,
     VoidCallback? onCustomTap,
+    int badgeCount = 0,
   }) {
     // 选中时用实心图标，未选中时用空心图标
     const itemColor = Colors.black;
@@ -146,8 +150,39 @@ class GlassBottomNavBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 图标
-              Icon(icon, size: 24, color: itemColor),
+              // 图标 + 角标
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(icon, size: 24, color: itemColor),
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: -10,
+                      top: -6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
+                        constraints: const BoxConstraints(minWidth: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Text(
+                          badgeCount > 99 ? '99+' : '$badgeCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 2),
               Text(
                 label,

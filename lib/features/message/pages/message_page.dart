@@ -8,7 +8,7 @@ class MessageItem {
   final int id;
   final String userName;
   final String avatarUrl;
-  final int unreadCount;
+  int unreadCount;
   bool isPinned;
 
   MessageItem({
@@ -21,7 +21,9 @@ class MessageItem {
 }
 
 class MessagePage extends StatefulWidget {
-  const MessagePage({super.key});
+  final ValueChanged<int>? onUnreadCountChanged;
+
+  const MessagePage({super.key, this.onUnreadCountChanged});
 
   @override
   State<MessagePage> createState() => _MessagePageState();
@@ -60,6 +62,14 @@ class _MessagePageState extends State<MessagePage>
     for (final item in _messages) {
       _controllersById[item.id] = SlidableController(this);
     }
+    _reportUnreadCount();
+  }
+
+  void _reportUnreadCount() {
+    final total = _messages.fold<int>(0, (sum, m) => sum + m.unreadCount);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onUnreadCountChanged?.call(total);
+    });
   }
 
   @override
@@ -94,6 +104,7 @@ class _MessagePageState extends State<MessagePage>
       final controller = _controllersById.remove(item.id);
       controller?.dispose();
     });
+    _reportUnreadCount();
   }
 
   // Handle tap on background or other items
@@ -199,13 +210,24 @@ class _MessagePageState extends State<MessagePage>
                               return;
                             }
 
+                            // 清零该聊天的未读数
+                            setState(() {
+                              item.unreadCount = 0;
+                            });
+                            _reportUnreadCount();
+
+                            // 传入清零后的全局未读总数
+                            final totalUnread = _messages.fold<int>(
+                              0,
+                              (sum, m) => sum + m.unreadCount,
+                            );
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => ChatPage(
                                   userName: item.userName,
                                   avatarUrl: item.avatarUrl,
-                                  unreadCount: item.unreadCount,
+                                  unreadCount: totalUnread,
                                 ),
                               ),
                             );
