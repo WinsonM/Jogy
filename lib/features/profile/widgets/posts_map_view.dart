@@ -16,7 +16,8 @@ class PostsMapView extends StatefulWidget {
   State<PostsMapView> createState() => _PostsMapViewState();
 }
 
-class _PostsMapViewState extends State<PostsMapView> {
+class _PostsMapViewState extends State<PostsMapView>
+    with TickerProviderStateMixin {
   late MapController _mapController;
   PostModel? _selectedPost;
   double _currentZoom = 13.0;
@@ -43,6 +44,46 @@ class _PostsMapViewState extends State<PostsMapView> {
       lng += post.location.longitude;
     }
     return LatLng(lat / widget.posts.length, lng / widget.posts.length);
+  }
+
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    final latTween = Tween<double>(
+      begin: _mapController.camera.center.latitude,
+      end: destLocation.latitude,
+    );
+    final lngTween = Tween<double>(
+      begin: _mapController.camera.center.longitude,
+      end: destLocation.longitude,
+    );
+    final zoomTween = Tween<double>(
+      begin: _mapController.camera.zoom,
+      end: destZoom,
+    );
+
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    final animation = CurvedAnimation(
+      parent: controller,
+      curve: Curves.fastOutSlowIn,
+    );
+
+    controller.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.dismissed) {
+        controller.dispose();
+      }
+    });
+
+    controller.forward();
   }
 
   @override
@@ -229,8 +270,7 @@ class _PostsMapViewState extends State<PostsMapView> {
                     _mapController.move(_mapController.camera.center, zoom);
                   },
                   onLocationTap: () {
-                    // Center on posts
-                    _mapController.move(_calculateCenter(), _currentZoom);
+                    _animatedMapMove(_calculateCenter(), _currentZoom);
                   },
                 ),
               ),

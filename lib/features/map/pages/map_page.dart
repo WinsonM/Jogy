@@ -731,22 +731,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                   );
                 },
                 onLocationTap: () {
-                  // Immediate animated move if we have a location
                   if (_userLocation != null) {
                     _animatedMapMove(_userLocation!, 15);
                   }
-                  // Refresh location and posts in background
-                  _getCurrentLocation().then((_) {
-                    // If location changed significantly, we might want to move again or just let it update state.
-                    // For now, if userLocation was null (first time), move to it.
-                    if (_userLocation != null && !mounted) return;
-                    // Only auto-move if we weren't already at a valid location or if we want to snap?
-                    // Usually explicit user tap should snap.
-                    if (_userLocation != null) {
-                      // Don't force move again if we already moved, unless it was null.
-                      // Actually, let's just let the first move handle it, or update if it was null.
-                    }
-                  });
                 },
               ),
             ),
