@@ -29,18 +29,90 @@ class RemoteDataSource {
   // ==================== Auth ====================
 
   /// Login with username and password
+  /// Returns: {access_token, refresh_token, token_type, expires_in}
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
       final response = await _dio.post(
         ApiConstants.login,
         data: {'username': username, 'password': password},
-        options: Options(contentType: Headers.formUrlEncodedContentType),
       );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleDioError(e, 'Login failed');
     }
   }
+
+  /// Register a new user
+  /// Returns: UserResponse
+  Future<Map<String, dynamic>> register(
+    String username,
+    String password, {
+    String? email,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.register,
+        data: {
+          'username': username,
+          'password': password,
+          if (email != null) 'email': email,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Registration failed');
+    }
+  }
+
+  /// Refresh access token
+  Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.refreshToken,
+        data: {'refresh_token': refreshToken},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Token refresh failed');
+    }
+  }
+
+  /// Logout
+  Future<void> logout() async {
+    try {
+      await _dio.post(ApiConstants.logout);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Logout failed');
+    }
+  }
+
+  /// Send verification code to email
+  Future<Map<String, dynamic>> sendCode(String email) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.sendCode,
+        data: {'email': email},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to send code');
+    }
+  }
+
+  /// Verify code
+  Future<Map<String, dynamic>> verifyCode(String email, String code) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.verifyCode,
+        data: {'email': email, 'code': code},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Verification failed');
+    }
+  }
+
+  // ==================== Users ====================
 
   /// Get current user info
   Future<UserModel> getCurrentUser() async {
@@ -52,134 +124,30 @@ class RemoteDataSource {
     }
   }
 
-  // ==================== Posts ====================
-
-  /// Fetch all posts
-  Future<List<PostModel>> fetchPosts({int skip = 0, int limit = 20}) async {
-    try {
-      final response = await _dio.get(
-        ApiConstants.posts,
-        queryParameters: {'skip': skip, 'limit': limit},
-      );
-      return (response.data as List)
-          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to load posts');
-    }
-  }
-
-  /// Fetch a single post by ID
-  Future<PostModel> fetchPostById(String postId) async {
-    try {
-      final response = await _dio.get(ApiConstants.postById(postId));
-      return PostModel.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to load post');
-    }
-  }
-
-  /// Fetch posts by user ID
-  Future<List<PostModel>> fetchPostsByUser(String userId) async {
-    try {
-      final response = await _dio.get(ApiConstants.postsByUser(userId));
-      return (response.data as List)
-          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to load user posts');
-    }
-  }
-
-  /// Create a new post
-  Future<PostModel> createPost({
-    required String content,
-    required double latitude,
-    required double longitude,
-    List<String>? imageUrls,
+  /// Update current user profile
+  Future<UserModel> updateProfile({
+    String? username,
+    String? avatarUrl,
+    String? bio,
+    String? gender,
+    String? birthday,
+    String? email,
   }) async {
     try {
-      final response = await _dio.post(
-        ApiConstants.posts,
-        data: {
-          'content': content,
-          'latitude': latitude,
-          'longitude': longitude,
-          'image_urls': imageUrls ?? [],
-        },
-      );
-      return PostModel.fromJson(response.data as Map<String, dynamic>);
+      final data = <String, dynamic>{};
+      if (username != null) data['username'] = username;
+      if (avatarUrl != null) data['avatar_url'] = avatarUrl;
+      if (bio != null) data['bio'] = bio;
+      if (gender != null) data['gender'] = gender;
+      if (birthday != null) data['birthday'] = birthday;
+      if (email != null) data['email'] = email;
+
+      final response = await _dio.patch(ApiConstants.userMe, data: data);
+      return UserModel.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to create post');
+      throw _handleDioError(e, 'Failed to update profile');
     }
   }
-
-  // ==================== Discover ====================
-
-  /// Fetch posts for discover (location-based)
-  Future<List<PostModel>> fetchDiscoverPosts({
-    required double latitude,
-    required double longitude,
-    double radiusKm = 10,
-    int limit = 50,
-  }) async {
-    try {
-      final response = await _dio.get(
-        ApiConstants.discover,
-        queryParameters: {
-          'latitude': latitude,
-          'longitude': longitude,
-          'radius_km': radiusKm,
-          'limit': limit,
-        },
-      );
-      return (response.data as List)
-          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to load discover posts');
-    }
-  }
-
-  // ==================== Likes & Favorites ====================
-
-  /// Like a post
-  Future<void> likePost(String postId) async {
-    try {
-      await _dio.post(ApiConstants.likePost(postId));
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to like post');
-    }
-  }
-
-  /// Unlike a post
-  Future<void> unlikePost(String postId) async {
-    try {
-      await _dio.delete(ApiConstants.unlikePost(postId));
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to unlike post');
-    }
-  }
-
-  /// Favorite a post
-  Future<void> favoritePost(String postId) async {
-    try {
-      await _dio.post(ApiConstants.favoritePost(postId));
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to favorite post');
-    }
-  }
-
-  /// Unfavorite a post
-  Future<void> unfavoritePost(String postId) async {
-    try {
-      await _dio.delete(ApiConstants.unfavoritePost(postId));
-    } on DioException catch (e) {
-      throw _handleDioError(e, 'Failed to unfavorite post');
-    }
-  }
-
-  // ==================== Users ====================
 
   /// Get user by ID
   Future<UserModel> fetchUserById(String userId) async {
@@ -191,21 +159,573 @@ class RemoteDataSource {
     }
   }
 
-  /// Follow a user
-  Future<void> followUser(String userId) async {
+  /// Get user's posts
+  Future<List<PostModel>> fetchPostsByUser(String userId) async {
     try {
-      await _dio.post(ApiConstants.follow(userId));
+      final response = await _dio.get(ApiConstants.userPosts(userId));
+      return (response.data as List)
+          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load user posts');
+    }
+  }
+
+  /// Get user's liked posts
+  Future<List<PostModel>> fetchLikedPosts(String userId) async {
+    try {
+      final response = await _dio.get(ApiConstants.userLikedPosts(userId));
+      return (response.data as List)
+          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load liked posts');
+    }
+  }
+
+  /// Get user's favorited posts
+  Future<List<PostModel>> fetchFavoritedPosts(String userId) async {
+    try {
+      final response = await _dio.get(ApiConstants.userFavoritedPosts(userId));
+      return (response.data as List)
+          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load favorited posts');
+    }
+  }
+
+  // ==================== Follows ====================
+
+  /// Follow a user (PUT, idempotent)
+  Future<Map<String, dynamic>> followUser(String userId) async {
+    try {
+      final response = await _dio.put(ApiConstants.follow(userId));
+      return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to follow user');
     }
   }
 
-  /// Unfollow a user
-  Future<void> unfollowUser(String userId) async {
+  /// Unfollow a user (DELETE, same path as follow)
+  Future<Map<String, dynamic>> unfollowUser(String userId) async {
     try {
-      await _dio.delete(ApiConstants.unfollow(userId));
+      final response = await _dio.delete(ApiConstants.follow(userId));
+      return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to unfollow user');
+    }
+  }
+
+  /// Get user's followers
+  Future<Map<String, dynamic>> fetchFollowers(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.followers(userId),
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load followers');
+    }
+  }
+
+  /// Get user's following
+  Future<Map<String, dynamic>> fetchFollowing(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.following(userId),
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load following');
+    }
+  }
+
+  // ==================== Posts ====================
+
+  /// Fetch a single post by ID
+  Future<PostModel> fetchPostById(String postId) async {
+    try {
+      final response = await _dio.get(ApiConstants.postById(postId));
+      return PostModel.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load post');
+    }
+  }
+
+  /// Create a new post
+  Future<PostModel> createPost({
+    required String contentText,
+    required double latitude,
+    required double longitude,
+    String postType = 'bubble',
+    String? title,
+    String? addressName,
+    List<String>? mediaUrls,
+    String? expireAt,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.posts,
+        data: {
+          'content_text': contentText,
+          'location': {'latitude': latitude, 'longitude': longitude},
+          'post_type': postType,
+          if (title != null) 'title': title,
+          if (addressName != null) 'address_name': addressName,
+          if (mediaUrls != null) 'media_urls': mediaUrls,
+          if (expireAt != null) 'expire_at': expireAt,
+        },
+      );
+      return PostModel.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to create post');
+    }
+  }
+
+  /// Delete a post
+  Future<void> deletePost(String postId) async {
+    try {
+      await _dio.delete(ApiConstants.postById(postId));
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to delete post');
+    }
+  }
+
+  // ==================== Discover ====================
+
+  /// Fetch posts for discover (viewport-based)
+  Future<Map<String, dynamic>> fetchDiscoverPosts({
+    required double minLatitude,
+    required double minLongitude,
+    required double maxLatitude,
+    required double maxLongitude,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.discover,
+        queryParameters: {
+          'min_latitude': minLatitude,
+          'min_longitude': minLongitude,
+          'max_latitude': maxLatitude,
+          'max_longitude': maxLongitude,
+          'limit': limit,
+          'offset': offset,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load discover posts');
+    }
+  }
+
+  /// Search posts by text
+  Future<List<PostModel>> searchPosts(String query, {int limit = 20}) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.searchPosts,
+        queryParameters: {'q': query, 'limit': limit},
+      );
+      return (response.data as List)
+          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to search posts');
+    }
+  }
+
+  // ==================== Likes ====================
+
+  /// Toggle like on a post
+  Future<Map<String, dynamic>> toggleLikePost(String postId) async {
+    try {
+      final response = await _dio.post(ApiConstants.likePost(postId));
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to like post');
+    }
+  }
+
+  /// Like a post (idempotent)
+  Future<Map<String, dynamic>> likePost(String postId) async {
+    try {
+      final response = await _dio.put(ApiConstants.likesMe(postId));
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to like post');
+    }
+  }
+
+  /// Unlike a post (idempotent)
+  Future<Map<String, dynamic>> unlikePost(String postId) async {
+    try {
+      final response = await _dio.delete(ApiConstants.likesMe(postId));
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to unlike post');
+    }
+  }
+
+  // ==================== Comment Likes ====================
+
+  /// Like a comment (idempotent)
+  Future<Map<String, dynamic>> likeComment(String commentId) async {
+    try {
+      final response = await _dio.put(ApiConstants.commentLikesMe(commentId));
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to like comment');
+    }
+  }
+
+  /// Unlike a comment (idempotent)
+  Future<Map<String, dynamic>> unlikeComment(String commentId) async {
+    try {
+      final response = await _dio.delete(
+        ApiConstants.commentLikesMe(commentId),
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to unlike comment');
+    }
+  }
+
+  // ==================== Favorites ====================
+
+  /// Toggle favorite on a post
+  Future<Map<String, dynamic>> toggleFavoritePost(String postId) async {
+    try {
+      final response = await _dio.post(ApiConstants.favoritePost(postId));
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to favorite post');
+    }
+  }
+
+  /// Favorite a post (idempotent)
+  Future<Map<String, dynamic>> favoritePost(String postId) async {
+    try {
+      final response = await _dio.put(ApiConstants.favoritesMe(postId));
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to favorite post');
+    }
+  }
+
+  /// Unfavorite a post (idempotent)
+  Future<Map<String, dynamic>> unfavoritePost(String postId) async {
+    try {
+      final response = await _dio.delete(ApiConstants.favoritesMe(postId));
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to unfavorite post');
+    }
+  }
+
+  // ==================== Comments ====================
+
+  /// Get comments for a post
+  Future<Map<String, dynamic>> fetchComments(
+    String postId, {
+    String? parentId,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.commentsByPost(postId),
+        queryParameters: {
+          if (parentId != null) 'parent_id': parentId,
+          'limit': limit,
+          'offset': offset,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load comments');
+    }
+  }
+
+  /// Create a comment
+  Future<Map<String, dynamic>> createComment(
+    String postId, {
+    required String content,
+    String? parentId,
+    String? replyToUserId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.commentsByPost(postId),
+        data: {
+          'content': content,
+          if (parentId != null) 'parent_id': parentId,
+          if (replyToUserId != null) 'reply_to_user_id': replyToUserId,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to create comment');
+    }
+  }
+
+  /// Delete a comment
+  Future<void> deleteComment(String postId, String commentId) async {
+    try {
+      await _dio.delete(ApiConstants.commentById(postId, commentId));
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to delete comment');
+    }
+  }
+
+  // ==================== Conversations ====================
+
+  /// Get conversation list
+  Future<Map<String, dynamic>> fetchConversations({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.conversations,
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load conversations');
+    }
+  }
+
+  /// Create or get a direct conversation
+  Future<Map<String, dynamic>> createDirectConversation(String userId) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.conversationsDirect,
+        data: {'user_id': userId},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to create conversation');
+    }
+  }
+
+  /// Pin/unpin a conversation
+  Future<void> pinConversation(String convId, bool isPinned) async {
+    try {
+      await _dio.patch(
+        ApiConstants.conversationPin(convId),
+        data: {'is_pinned': isPinned},
+      );
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to update pin status');
+    }
+  }
+
+  /// Remove user from conversation
+  Future<void> deleteConversation(String convId) async {
+    try {
+      await _dio.delete(ApiConstants.conversationById(convId));
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to delete conversation');
+    }
+  }
+
+  /// Get messages in a conversation
+  Future<Map<String, dynamic>> fetchMessages(
+    String convId, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.conversationMessages(convId),
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load messages');
+    }
+  }
+
+  /// Send a message in a conversation
+  Future<Map<String, dynamic>> sendMessage(
+    String convId, {
+    required String contentText,
+    String messageType = 'text',
+    Map<String, dynamic>? meta,
+    List<Map<String, dynamic>>? attachments,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.conversationMessages(convId),
+        data: {
+          'message_type': messageType,
+          'content_text': contentText,
+          if (meta != null) 'meta': meta,
+          if (attachments != null) 'attachments': attachments,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to send message');
+    }
+  }
+
+  /// Mark conversation as read
+  Future<void> markConversationRead(
+    String convId, {
+    String? lastReadMessageId,
+  }) async {
+    try {
+      await _dio.post(
+        ApiConstants.conversationRead(convId),
+        data: {
+          if (lastReadMessageId != null)
+            'last_read_message_id': lastReadMessageId,
+        },
+      );
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to mark as read');
+    }
+  }
+
+  // ==================== Search ====================
+
+  /// Global search (users + posts)
+  Future<Map<String, dynamic>> searchGlobal(
+    String query, {
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.searchGlobal,
+        queryParameters: {'q': query, 'limit': limit},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Search failed');
+    }
+  }
+
+  // ==================== History ====================
+
+  /// Get browsing history
+  Future<Map<String, dynamic>> fetchHistory({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.userMeHistory,
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load history');
+    }
+  }
+
+  /// Add to browsing history
+  Future<void> addHistory(String postId) async {
+    try {
+      await _dio.post(
+        ApiConstants.userMeHistory,
+        data: {'post_id': postId},
+      );
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to add history');
+    }
+  }
+
+  /// Clear browsing history
+  Future<void> clearHistory() async {
+    try {
+      await _dio.delete(ApiConstants.userMeHistory);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to clear history');
+    }
+  }
+
+  // ==================== QR ====================
+
+  /// Resolve QR code
+  Future<Map<String, dynamic>> resolveQR(String code) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.qrResolve,
+        data: {'code': code},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to resolve QR code');
+    }
+  }
+
+  // ==================== Location ====================
+
+  /// Sync user location
+  Future<Map<String, dynamic>> syncLocation({
+    required double latitude,
+    required double longitude,
+    double? accuracy,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.locationSync,
+        data: {
+          'latitude': latitude,
+          'longitude': longitude,
+          if (accuracy != null) 'accuracy': accuracy,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to sync location');
+    }
+  }
+
+  // ==================== Uploads ====================
+
+  /// Upload an image file, returns URL
+  Future<String> uploadImage(String filePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+      });
+      final response = await _dio.post(
+        ApiConstants.uploadImage,
+        data: formData,
+      );
+      return (response.data as Map<String, dynamic>)['url'] as String;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to upload image');
+    }
+  }
+
+  /// Upload a generic file, returns URL
+  Future<String> uploadFile(String filePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+      });
+      final response = await _dio.post(
+        ApiConstants.uploadFile,
+        data: formData,
+      );
+      return (response.data as Map<String, dynamic>)['url'] as String;
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to upload file');
     }
   }
 
