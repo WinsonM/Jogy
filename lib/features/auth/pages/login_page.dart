@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import '../widgets/grid_bubble_background.dart';
@@ -44,6 +45,7 @@ class _LoginPageState extends State<LoginPage>
   final _registerEmailController = TextEditingController();
   final _registerPasswordController = TextEditingController();
   final _registerConfirmPasswordController = TextEditingController();
+  final _registerVerificationCodeController = TextEditingController();
 
   // 验证码控制器
   final List<TextEditingController> _verificationControllers = List.generate(
@@ -60,6 +62,14 @@ class _LoginPageState extends State<LoginPage>
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  // 验证码倒计时相关
+  int _countdownSeconds = 0;
+  Timer? _countdownTimer;
+  bool _isSendingCode = false;
+
+  // 邮箱错误信息（用于显示后端返回的"邮箱已被使用"等错误）
+  String? _emailError;
+
   // Focus nodes
   final FocusNode _loginEmailFocus = FocusNode();
   final FocusNode _loginPasswordFocus = FocusNode();
@@ -67,6 +77,7 @@ class _LoginPageState extends State<LoginPage>
   final FocusNode _registerEmailFocus = FocusNode();
   final FocusNode _registerPasswordFocus = FocusNode();
   final FocusNode _registerConfirmPasswordFocus = FocusNode();
+  final FocusNode _registerVerificationCodeFocus = FocusNode();
 
   // 保存注册的邮箱用于验证码页面显示
   String _registeredEmail = '';
@@ -81,6 +92,7 @@ class _LoginPageState extends State<LoginPage>
     _registerEmailFocus.addListener(_onFocusChange);
     _registerPasswordFocus.addListener(_onFocusChange);
     _registerConfirmPasswordFocus.addListener(_onFocusChange);
+    _registerVerificationCodeFocus.addListener(_onFocusChange);
     for (final node in _verificationFocusNodes) {
       node.addListener(_onFocusChange);
     }
@@ -94,6 +106,7 @@ class _LoginPageState extends State<LoginPage>
         _registerEmailFocus.hasFocus ||
         _registerPasswordFocus.hasFocus ||
         _registerConfirmPasswordFocus.hasFocus ||
+        _registerVerificationCodeFocus.hasFocus ||
         _verificationFocusNodes.any((n) => n.hasFocus);
 
     if (_isFocused != hasFocus) {
@@ -109,6 +122,8 @@ class _LoginPageState extends State<LoginPage>
     _registerEmailController.dispose();
     _registerPasswordController.dispose();
     _registerConfirmPasswordController.dispose();
+    _registerVerificationCodeController.dispose();
+    _countdownTimer?.cancel();
     for (final controller in _verificationControllers) {
       controller.dispose();
     }
@@ -119,6 +134,7 @@ class _LoginPageState extends State<LoginPage>
     _registerEmailFocus.dispose();
     _registerPasswordFocus.dispose();
     _registerConfirmPasswordFocus.dispose();
+    _registerVerificationCodeFocus.dispose();
     for (final node in _verificationFocusNodes) {
       node.dispose();
     }
@@ -126,11 +142,17 @@ class _LoginPageState extends State<LoginPage>
   }
 
   void _switchToRegister() {
-    setState(() => _authMode = AuthMode.register);
+    setState(() {
+      _authMode = AuthMode.register;
+      _emailError = null;
+    });
   }
 
   void _switchToLogin() {
-    setState(() => _authMode = AuthMode.login);
+    setState(() {
+      _authMode = AuthMode.login;
+      _emailError = null;
+    });
   }
 
   void _handleLogin() async {
@@ -156,24 +178,126 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
+  /// 发送验证码到邮箱
+  void _sendVerificationCode() async {
+    // 先验证邮箱格式
+    final email = _registerEmailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _emailError = '请先输入邮箱');
+      _registerFormKey.currentState?.validate();
+      return;
+    }
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+      setState(() => _emailError = '请输入有效的邮箱地址');
+      _registerFormKey.currentState?.validate();
+      return;
+    }
+
+    setState(() {
+      _isSendingCode = true;
+      _emailError = null;
+    });
+
+    try {
+      // TODO: 替换为实际的 RemoteDataSource 调用
+      // await _remoteDataSource.sendCode(email);
+      await Future.delayed(const Duration(seconds: 1));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('验证码已发送，请查收邮箱')),
+      );
+      _startCountdown();
+    } catch (e) {
+      if (!mounted) return;
+      final errorMsg = e.toString();
+      if (errorMsg.contains('EMAIL_TAKEN') || errorMsg.contains('already exists')) {
+        setState(() => _emailError = '该邮箱已被注册');
+        _registerFormKey.currentState?.validate();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送失败：$errorMsg')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSendingCode = false);
+    }
+  }
+
+  /// 开始60秒倒计时
+  void _startCountdown() {
+    setState(() => _countdownSeconds = 60);
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _countdownSeconds--;
+        if (_countdownSeconds <= 0) {
+          timer.cancel();
+        }
+      });
+    });
+  }
+
   void _handleRegister() async {
     if (!_registerFormKey.currentState!.validate()) return;
 
+    // 验证码不能为空
+    final code = _registerVerificationCodeController.text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入验证码')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // TODO: 替换为实际的 RemoteDataSource 调用
+      // 1. 先注册
+      // await _remoteDataSource.register(
+      //   _registerNicknameController.text.trim(),
+      //   _registerPasswordController.text,
+      //   email: _registerEmailController.text.trim(),
+      // );
+      // 2. 再验证邮箱
+      // await _remoteDataSource.verifyCode(
+      //   _registerEmailController.text.trim(),
+      //   code,
+      // );
+      await Future.delayed(const Duration(seconds: 1));
 
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _registeredEmail = _registerEmailController.text;
-      _authMode = AuthMode.verification;
-    });
+      if (!mounted) return;
+      setState(() => _isLoading = false);
 
-    // 自动聚焦第一个验证码输入框
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _verificationFocusNodes[0].requestFocus();
-    });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('注册成功！')),
+      );
+
+      // 注册成功后返回登录
+      setState(() => _authMode = AuthMode.login);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      final errorMsg = e.toString();
+      if (errorMsg.contains('EMAIL_TAKEN') || errorMsg.contains('already exists')) {
+        setState(() => _emailError = '该邮箱已被注册');
+        _registerFormKey.currentState?.validate();
+      } else if (errorMsg.contains('USERNAME_TAKEN')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('该用户名已被使用')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('注册失败：$errorMsg')),
+        );
+      }
+    }
   }
 
   void _handleVerification() async {
@@ -481,9 +605,22 @@ class _LoginPageState extends State<LoginPage>
               ).hasMatch(value!)) {
                 return '请输入有效的邮箱地址';
               }
+              // 显示后端返回的邮箱错误
+              if (_emailError != null) {
+                final err = _emailError;
+                // 清除错误，避免下次验证时重复显示
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _emailError = null;
+                });
+                return err;
+              }
               return null;
             },
           ),
+          const SizedBox(height: 12),
+
+          // 验证码输入框 + 获取验证码按钮
+          _buildVerificationCodeField(),
           const SizedBox(height: 12),
 
           // 密码
@@ -639,6 +776,65 @@ class _LoginPageState extends State<LoginPage>
           ),
         ],
       ),
+    );
+  }
+
+  /// 注册表单中的验证码输入框 + 获取验证码按钮
+  Widget _buildVerificationCodeField() {
+    const primaryColor = Color(0xFF5B9BD5);
+    final bool canSend = _countdownSeconds == 0 && !_isSendingCode;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 验证码输入框
+        Expanded(
+          child: _buildTextField(
+            controller: _registerVerificationCodeController,
+            focusNode: _registerVerificationCodeFocus,
+            hintText: '验证码',
+            prefixIcon: Icons.verified_user_outlined,
+            keyboardType: TextInputType.number,
+            validator: (value) {
+              if (value?.isEmpty ?? true) return '请输入验证码';
+              return null;
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        // 获取验证码按钮
+        SizedBox(
+          height: 56,
+          child: ElevatedButton(
+            onPressed: canSend ? _sendVerificationCode : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: canSend ? primaryColor : Colors.grey.shade300,
+              foregroundColor: Colors.white,
+              disabledForegroundColor: Colors.grey.shade500,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+            ),
+            child: _isSendingCode
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                : Text(
+                    _countdownSeconds > 0
+                        ? '${_countdownSeconds}s'
+                        : '获取验证码',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
