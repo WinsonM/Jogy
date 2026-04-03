@@ -622,17 +622,26 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                     child: GestureDetector(
                       onTap: _navigateToSearch,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(22),
+                        borderRadius: BorderRadius.circular(25),
                         child: Container(
-                          height: 44,
+                          height: 50,
                           decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(153), // 60% 不透明度
-                            borderRadius: BorderRadius.circular(22),
+                            color: Colors.white.withAlpha(210),
+                            borderRadius: BorderRadius.circular(25),
+                            border: Border.all(
+                              color: Colors.white.withAlpha(105),
+                              width: 1,
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withAlpha(20),
                                 blurRadius: 10,
                                 offset: const Offset(0, 2),
+                              ),
+                              BoxShadow(
+                                color: Colors.white.withAlpha(90),
+                                blurRadius: 8,
+                                offset: const Offset(0, -1),
                               ),
                             ],
                           ),
@@ -667,13 +676,22 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(153), // 60% 不透明度
+                          color: Colors.white.withAlpha(200),
                           shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withAlpha(105),
+                            width: 1,
+                          ),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withAlpha(20),
                               blurRadius: 10,
                               offset: const Offset(0, 2),
+                            ),
+                            BoxShadow(
+                              color: Colors.white.withAlpha(90),
+                              blurRadius: 8,
+                              offset: const Offset(0, -1),
                             ),
                           ],
                         ),
@@ -695,13 +713,22 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(153), // 60% 不透明度
+                          color: Colors.white.withAlpha(200),
                           shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withAlpha(105),
+                            width: 1,
+                          ),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withAlpha(20),
                               blurRadius: 10,
                               offset: const Offset(0, 2),
+                            ),
+                            BoxShadow(
+                              color: Colors.white.withAlpha(90),
+                              blurRadius: 8,
+                              offset: const Offset(0, -1),
                             ),
                           ],
                         ),

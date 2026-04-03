@@ -43,13 +43,22 @@ class GlassBottomNavBar extends StatelessWidget {
               child: Container(
                 height: 80,
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(153), // 60% 不透明度
+                  color: Colors.white.withAlpha(200),
                   borderRadius: BorderRadius.circular(40),
+                  border: Border.all(
+                    color: Colors.white.withAlpha(105),
+                    width: 1,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withAlpha(20),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
+                    ),
+                    BoxShadow(
+                      color: Colors.white.withAlpha(90),
+                      blurRadius: 8,
+                      offset: const Offset(0, -1),
                     ),
                   ],
                 ),
