@@ -170,11 +170,12 @@ class _LoginPageState extends State<LoginPage>
       context,
     ).showSnackBar(const SnackBar(content: Text('登录成功！')));
 
-    // 登录成功后导航到主页 (HomeWrapper 默认显示 MapPage)
+    // 登录成功后导航到主页（并清空登录相关页面栈）
     if (mounted) {
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeWrapper()));
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeWrapper()),
+        (route) => false,
+      );
     }
   }
 

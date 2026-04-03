@@ -22,6 +22,7 @@ class _PostsMapViewState extends State<PostsMapView> {
   JogyMapController? _jogyMapController;
   PostModel? _selectedPost;
   double _currentZoom = 13.0;
+  bool _isViewportReady = false;
 
   @override
   void dispose() {
@@ -42,7 +43,13 @@ class _PostsMapViewState extends State<PostsMapView> {
   }
 
   void _onCameraMove(MapCameraEvent event) {
-    if (event.source == MapMoveSource.gesture) {
+    if (!_isViewportReady &&
+        event.camera.viewportSize.x > 0 &&
+        event.camera.viewportSize.y > 0) {
+      setState(() => _isViewportReady = true);
+    }
+
+    if (event.source == MapMoveSource.gesture && _currentZoom != event.camera.zoom) {
       setState(() => _currentZoom = event.camera.zoom);
     }
   }
@@ -120,6 +127,9 @@ class _PostsMapViewState extends State<PostsMapView> {
               onMapCreated: (controller) {
                 setState(() {
                   _jogyMapController = controller;
+                  _isViewportReady =
+                      controller.cameraState.viewportSize.x > 0 &&
+                      controller.cameraState.viewportSize.y > 0;
                 });
               },
               onCameraMove: _onCameraMove,
@@ -128,8 +138,7 @@ class _PostsMapViewState extends State<PostsMapView> {
               },
             )),
             // 帖子标记覆盖层
-            if (_jogyMapController != null &&
-                _jogyMapController!.cameraState.viewportSize.x > 0)
+            if (_jogyMapController != null && _isViewportReady)
               ...widget.posts
                   .map((post) => _buildPostMarkerOverlay(post)),
             // Selected post preview card

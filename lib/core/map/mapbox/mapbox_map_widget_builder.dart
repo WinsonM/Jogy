@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import '../map_types.dart';
@@ -61,6 +63,10 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
     // 通知外部地图创建完成
     widget.options.onMapCreated?.call(_controller!);
+
+    // 首次创建后立即尝试同步一次相机状态（含视口尺寸）
+    // 如果地图仍在初始化，后续 onMapLoaded/onMapIdle 会再次触发同步。
+    _updateCameraState(MapMoveSource.programmatic);
   }
 
   void _onCameraChanged(mapbox.CameraChangedEventData event) {
@@ -69,6 +75,14 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
         ? MapMoveSource.animation
         : MapMoveSource.gesture;
     _updateCameraState(source);
+  }
+
+  void _onMapLoaded(mapbox.MapLoadedEventData event) {
+    _updateCameraState(MapMoveSource.programmatic);
+  }
+
+  void _onMapIdle(mapbox.MapIdleEventData event) {
+    _updateCameraState(MapMoveSource.programmatic);
   }
 
   Future<void> _updateCameraState(MapMoveSource source) async {
@@ -125,7 +139,13 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
         pitch: widget.options.initialPitch,
         bearing: widget.options.initialBearing,
       ),
+      // 让地图在嵌套滚动容器（如 Profile 的 SingleChildScrollView）中优先接管拖拽手势
+      gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+        Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+      },
       onMapCreated: _onMapCreated,
+      onMapLoadedListener: _onMapLoaded,
+      onMapIdleListener: _onMapIdle,
       onCameraChangeListener: _onCameraChanged,
       onTapListener: _onTapListener,
     );

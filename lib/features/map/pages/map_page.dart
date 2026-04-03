@@ -49,6 +49,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   bool _autoExpandDisabled = false; // Disable auto-expand until user drags
   double _mapRotation = 0.0; // 地图旋转角度（弧度）
   double _currentZoom = 15.0; // 当前缩放级别，默认为 15.0
+  bool _isViewportReady = false; // 是否已拿到有效地图视口尺寸
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -415,6 +416,12 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   // 地图相机移动回调
   void _onCameraMove(MapCameraEvent event) {
+    if (!_isViewportReady &&
+        event.camera.viewportSize.x > 0 &&
+        event.camera.viewportSize.y > 0) {
+      setState(() => _isViewportReady = true);
+    }
+
     // Re-enable auto-expand on gesture
     if (event.source == MapMoveSource.gesture) {
       if (_manualExpandedIndex != null) {
@@ -587,14 +594,16 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               onMapCreated: (controller) {
                 setState(() {
                   _jogyMapController = controller;
+                  _isViewportReady =
+                      controller.cameraState.viewportSize.x > 0 &&
+                      controller.cameraState.viewportSize.y > 0;
                 });
               },
               onCameraMove: _onCameraMove,
               onTap: _onMapTap,
             )),
             // 标记覆盖层（仅在地图控制器就绪后渲染）
-            if (_jogyMapController != null &&
-                _jogyMapController!.cameraState.viewportSize.x > 0) ...[
+            if (_jogyMapController != null && _isViewportReady) ...[
               // 用户位置标记
               _buildUserLocationOverlay(),
               // Posts 气泡标记
