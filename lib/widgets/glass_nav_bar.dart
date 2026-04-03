@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class GlassBottomNavBar extends StatelessWidget {
@@ -41,73 +40,70 @@ class GlassBottomNavBar extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(40),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(153), // 60% 不透明度
-                    borderRadius: BorderRadius.circular(40),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(20),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  child: Stack(
-                    children: [
-                      // 滑动选中指示器背景
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutCubic,
-                        left: indicatorLeft,
-                        top: 0,
-                        bottom: 0,
-                        width: itemWidth,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(32),
-                          ),
+              child: Container(
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(153), // 60% 不透明度
+                  borderRadius: BorderRadius.circular(40),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(20),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                child: Stack(
+                  children: [
+                    // 滑动选中指示器背景
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      left: indicatorLeft,
+                      top: 0,
+                      bottom: 0,
+                      width: itemWidth,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(32),
                         ),
                       ),
-                      // 导航项 Row - 使用透明背景
-                      Row(
-                        children: [
-                          _buildNavItem(
-                            index: 0,
-                            filledIcon: Icons.home,
-                            outlinedIcon: Icons.home_outlined,
-                            label: '主页',
-                            isSelected: currentIndex == 0,
-                          ),
-                          _buildNavItem(
-                            index: 1,
-                            filledIcon: Icons.chat_bubble,
-                            outlinedIcon: Icons.chat_bubble_outline,
-                            label: '消息',
-                            isSelected: currentIndex == 1,
-                            badgeCount: messageBadgeCount,
-                          ),
-                          // "我的"按钮
-                          _buildNavItem(
-                            index: 2,
-                            filledIcon: Icons.person,
-                            outlinedIcon: Icons.person_outline,
-                            label: '我的',
-                            isSelected: currentIndex == 2,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                    // 导航项 Row - 使用透明背景
+                    Row(
+                      children: [
+                        _buildNavItem(
+                          index: 0,
+                          filledIcon: Icons.home,
+                          outlinedIcon: Icons.home_outlined,
+                          label: '主页',
+                          isSelected: currentIndex == 0,
+                        ),
+                        _buildNavItem(
+                          index: 1,
+                          filledIcon: Icons.chat_bubble,
+                          outlinedIcon: Icons.chat_bubble_outline,
+                          label: '消息',
+                          isSelected: currentIndex == 1,
+                          badgeCount: messageBadgeCount,
+                        ),
+                        // "我的"按钮
+                        _buildNavItem(
+                          index: 2,
+                          filledIcon: Icons.person,
+                          outlinedIcon: Icons.person_outline,
+                          label: '我的',
+                          isSelected: currentIndex == 2,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
