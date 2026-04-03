@@ -7,12 +7,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import '../../../core/map/map_types.dart';
+import '../../../core/map/map_controller.dart';
+import '../../../core/map/map_widget_builder.dart';
+import '../../../core/map/mapbox/mapbox_map_widget_builder.dart';
 import '../widgets/map_bubble.dart';
 import '../widgets/zoom_arc_control.dart';
 import '../../detail/pages/detail_page.dart';
@@ -34,7 +36,7 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
-  final MapController _mapController = MapController();
+  JogyMapController? _jogyMapController;
   // 以屏幕几何中心为基准的 Y 方向偏移（尖角位置）。
   // 0 表示尖角在屏幕垂直正中心；负值整体往上移，正值整体往下移。
   // 这里取「往上移动约半个展开气泡高度」，让整块气泡区域落在屏幕视觉中心附近。
@@ -52,7 +54,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   final Map<int, double> _scaleFactors = {};
 
   // 用户位置相关
-  LatLng? _userLocation;
+  MapLatLng? _userLocation;
   bool _locationLoading = true;
 
   final GlobalKey _addButtonKey = GlobalKey();
@@ -95,7 +97,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       MockDataSource.setCenter(position.latitude, position.longitude);
 
       setState(() {
-        _userLocation = LatLng(position.latitude, position.longitude);
+        _userLocation = MapLatLng(position.latitude, position.longitude);
         _locationLoading = false;
       });
 
@@ -109,61 +111,63 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
   }
 
-  // 计算“理想尖角位置”（用于自动展开判断和点击居中），只依赖屏幕尺寸，
+  // 计算”理想尖角位置”（用于自动展开判断和点击居中），只依赖屏幕尺寸，
   // 与底部导航栏等 UI 高度解耦，保证以后改导航栏不会影响气泡锚点。
-  Offset _expandedBubbleTipTarget(math.Point<double> mapSize) {
-    final screenCenterY = mapSize.y / 2;
+  Offset _expandedBubbleTipTarget(MapScreenPoint viewportSize) {
+    final screenCenterY = viewportSize.y / 2;
     // 向上偏移 1/3 屏幕高度
-    final upwardOffset = mapSize.y / 7;
+    final upwardOffset = viewportSize.y / 7;
     return Offset(
-      mapSize.x / 2,
+      viewportSize.x / 2,
       screenCenterY + _expandedBubbleTipYOffset - upwardOffset,
     );
   }
 
-  Offset _expandedBubbleCenterOffset(math.Point<double> mapSize) {
-    // MapController.move 的 offset 是相对于屏幕中心的偏移。
-    // 目标位置使用 _expandedBubbleTipTarget 返回的位置（与自动展开一致）。
-    final targetTip = _expandedBubbleTipTarget(mapSize);
-    final screenCenterY = mapSize.y / 2;
+  Offset _expandedBubbleCenterOffset(MapScreenPoint viewportSize) {
+    // 计算屏幕像素偏移，用于 adjustCenterForScreenOffset。
+    final targetTip = _expandedBubbleTipTarget(viewportSize);
+    final screenCenterY = viewportSize.y / 2;
     // 计算偏移：目标位置 - 屏幕中心
     return Offset(0, targetTip.dy - screenCenterY);
   }
 
   // Calculate scale factor based on distance from screen center
-  void _updateScaleFactors(MapCamera camera) {
+  void _updateScaleFactors() {
     try {
-      if (camera.size.x == 0 || camera.size.y == 0) {
-        return;
-      }
-      final mapSize = camera.size;
+      final controller = _jogyMapController;
+      if (controller == null) return;
+      final state = controller.cameraState;
+      final vw = state.viewportSize.x;
+      final vh = state.viewportSize.y;
+      if (vw == 0 || vh == 0) return;
+      final viewportSize = state.viewportSize;
 
       final posts = context.read<PostProvider>().posts;
 
       // 自动展开的判定中心与点击居中的尖角目标一致，
       // 只依赖屏幕尺寸，不依赖底部导航栏高度。
-      final focusPoint = _expandedBubbleTipTarget(mapSize);
+      final focusPoint = _expandedBubbleTipTarget(viewportSize);
       final centerX = focusPoint.dx;
       final centerY = focusPoint.dy;
 
-      final maxDistance =
-          math.sqrt(mapSize.x * mapSize.x + mapSize.y * mapSize.y) / 2;
+      final maxDistance = math.sqrt(vw * vw + vh * vh) / 2;
       bool needsRebuild = false;
       bool suppressedStillEligible = false;
 
       // Auto-expansion threshold: 30% of screen width (increased for easier triggering)
-      final expansionThreshold = mapSize.x * 0.30;
+      final expansionThreshold = vw * 0.30;
       int? closestIndex;
       double minDistance = double.infinity;
 
       for (int i = 0; i < posts.length; i++) {
-        final markerPosition = LatLng(
+        final markerPosition = MapLatLng(
           posts[i].location.latitude,
           posts[i].location.longitude,
         );
 
         // Get marker's screen position (this is the bubble tip location)
-        final markerPoint = camera.latLngToScreenPoint(markerPosition);
+        final markerPoint = controller.latLngToScreenPoint(markerPosition);
+        if (markerPoint == null) continue;
 
         // Calculate distance from marker point to center
         // For auto-expand, we check if the marker enters the center zone
@@ -176,12 +180,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         final isEligible = distance < expansionThreshold;
         if (isEligible) {
           if (i == _suppressedAutoIndex) {
-            // 这个气泡是被抑制的（用户刚收起它）
-            // 只标记它仍然符合条件，但不参与"最近气泡"的竞选
             suppressedStillEligible = true;
           } else if (distance < minDistance) {
-            // 这个气泡不被抑制，且比之前记录的更近
-            // 更新为新的候选者
             minDistance = distance;
             closestIndex = i;
           }
@@ -206,13 +206,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
       // Auto-expand logic
       if (_manualExpandedIndex == null && !_autoExpandDisabled) {
-        // No manual selection and auto-expand is enabled - use auto-expand
         if (closestIndex != _expandedIndex) {
           _expandedIndex = closestIndex;
           needsRebuild = true;
         }
       } else if (_manualExpandedIndex != null) {
-        // Keep manual selection
         if (_expandedIndex != _manualExpandedIndex) {
           _expandedIndex = _manualExpandedIndex;
           needsRebuild = true;
@@ -249,7 +247,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       ),
     );
 
-    if (result != null && mounted) {
+    if (result != null && mounted && _jogyMapController != null) {
       // 找到对应的 index
       final posts = context.read<PostProvider>().posts;
       final index = posts.indexWhere((p) => p.id == result.id);
@@ -262,13 +260,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           _suppressedAutoIndex = null;
         });
 
-        final cameraSize = _mapController.camera.size;
-        _mapController.move(
-          LatLng(result.location.latitude, result.location.longitude),
-          16,
-          // Center the marker tip within the visible map area.
-          offset: _expandedBubbleCenterOffset(cameraSize),
+        final viewportSize = _jogyMapController!.cameraState.viewportSize;
+        final offset = _expandedBubbleCenterOffset(viewportSize);
+        final target = MapLatLng(result.location.latitude, result.location.longitude);
+        final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
+          target, 16, offset.dx, offset.dy,
         );
+        _jogyMapController!.moveTo(adjustedCenter, zoom: 16);
       }
     }
   }
@@ -415,6 +413,122 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     );
   }
 
+  // 地图相机移动回调
+  void _onCameraMove(MapCameraEvent event) {
+    // Re-enable auto-expand on gesture
+    if (event.source == MapMoveSource.gesture) {
+      if (_manualExpandedIndex != null) {
+        _manualExpandedIndex = null;
+      }
+      if (_autoExpandDisabled) {
+        _autoExpandDisabled = false;
+      }
+    }
+
+    // 更新地图旋转角度
+    final newRotation = event.camera.bearing * (math.pi / 180);
+    if (_mapRotation != newRotation) {
+      _mapRotation = newRotation;
+    }
+    // Update current zoom
+    if (_currentZoom != event.camera.zoom) {
+      _currentZoom = event.camera.zoom;
+    }
+    // Update scale factors when map moves
+    _updateScaleFactors();
+  }
+
+  // 地图点击回调
+  void _onMapTap(MapLatLng latLng) {
+    final collapsedIndex = _expandedIndex;
+    setState(() {
+      _manualExpandedIndex = null;
+      _expandedIndex = null;
+      _suppressedAutoIndex = collapsedIndex;
+      _autoExpandDisabled = true;
+    });
+  }
+
+  // 构建用户位置覆盖层
+  Widget _buildUserLocationOverlay() {
+    if (_userLocation == null || _jogyMapController == null) {
+      return const SizedBox.shrink();
+    }
+    final screenPoint = _jogyMapController!.latLngToScreenPoint(_userLocation!);
+    if (screenPoint == null) return const SizedBox.shrink();
+
+    const size = MapBubbleWidget.collapsedSize;
+    return Positioned(
+      left: screenPoint.x - size / 2,
+      top: screenPoint.y - size,
+      width: size,
+      height: size,
+      child: _UserLocationMarker(mapRotation: _mapRotation),
+    );
+  }
+
+  // 构建单个气泡覆盖层
+  Widget _buildBubbleOverlay(List<PostModel> posts, int index) {
+    final post = posts[index];
+    final isExpanded = _expandedIndex == index;
+    final scaleFactor = _scaleFactors[index] ?? 1.0;
+
+    final screenPoint = _jogyMapController?.latLngToScreenPoint(
+      MapLatLng(post.location.latitude, post.location.longitude),
+    );
+    if (screenPoint == null) return const SizedBox.shrink();
+
+    // Alignment: bottomCenter - 尖角在地理坐标位置
+    const size = MapBubbleWidget.expandedHeight;
+    return Positioned(
+      left: screenPoint.x - size / 2,
+      top: screenPoint.y - size,
+      width: size,
+      height: size,
+      child: MapBubbleWidget(
+        isExpanded: isExpanded,
+        scaleFactor: scaleFactor,
+        post: post,
+        mapRotation: _mapRotation,
+        onTap: () {
+          if (isExpanded) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (c) => DetailPage(postId: post.id),
+              ),
+            );
+          } else {
+            // Manual expand - override auto
+            BrowsingHistoryService().addToHistory(post);
+            setState(() {
+              _manualExpandedIndex = index;
+              _expandedIndex = index;
+              _suppressedAutoIndex = null;
+            });
+            if (_jogyMapController != null) {
+              final viewportSize =
+                  _jogyMapController!.cameraState.viewportSize;
+              final offset = _expandedBubbleCenterOffset(viewportSize);
+              final target = MapLatLng(
+                post.location.latitude,
+                post.location.longitude,
+              );
+              final adjustedCenter =
+                  MapGeoUtils.adjustCenterForScreenOffset(
+                target,
+                16,
+                offset.dx,
+                offset.dy,
+              );
+              _jogyMapController!.moveTo(adjustedCenter, zoom: 16);
+            }
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 位置加载中显示加载指示器
@@ -449,7 +563,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         final sortedIndices = List<int>.generate(posts.length, (i) => i);
         if (_expandedIndex != null) {
           sortedIndices.sort((a, b) {
-            if (a == _expandedIndex) return 1; // Move to end (top layer)
+            if (a == _expandedIndex) return 1;
             if (b == _expandedIndex) return -1;
             return 0;
           });
@@ -458,129 +572,35 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         // 使用用户位置作为中心，如果获取失败则使用第一个 post 位置
         final mapCenter =
             _userLocation ??
-            LatLng(posts[0].location.latitude, posts[0].location.longitude);
+            MapLatLng(posts[0].location.latitude, posts[0].location.longitude);
 
         return Stack(
           children: [
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: mapCenter,
-                initialZoom: 15.0,
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-                ),
-                onTap: (_, __) {
-                  // Clear manual selection and disable auto-expand
-                  final collapsedIndex = _expandedIndex;
-                  setState(() {
-                    _manualExpandedIndex = null;
-                    _expandedIndex = null;
-                    _suppressedAutoIndex = collapsedIndex;
-                    _autoExpandDisabled =
-                        true; // Disable auto-expand until drag
-                  });
-                },
-                onMapEvent: (event) {
-                  // When user drags the map, clear manual selection and re-enable auto-expand
-                  if (event is MapEventMove &&
-                      event.source == MapEventSource.onDrag) {
-                    if (_manualExpandedIndex != null) {
-                      _manualExpandedIndex = null;
-                    }
-                    // Re-enable auto-expand when user starts dragging
-                    if (_autoExpandDisabled) {
-                      _autoExpandDisabled = false;
-                    }
-                  }
-                  // 更新地图旋转角度
-                  final newRotation =
-                      event.camera.rotation * (3.14159265359 / 180);
-                  if (_mapRotation != newRotation) {
-                    setState(() => _mapRotation = newRotation);
-                  }
-                  // Update current zoom
-                  if (_currentZoom != event.camera.zoom) {
-                    setState(() => _currentZoom = event.camera.zoom);
-                  }
-                  // Update scale factors when map moves
-                  _updateScaleFactors(event.camera);
-                },
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: MapConfig.tileUrl,
-                  userAgentPackageName: 'com.example.jogy',
-                ),
-                // 用户位置标记 - 先渲染，确保不会遮挡展开的气泡
-                if (_userLocation != null)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: _userLocation!,
-                        width: MapBubbleWidget.collapsedSize,
-                        height: MapBubbleWidget.collapsedSize,
-                        alignment: Alignment.bottomCenter,
-                        child: _UserLocationMarker(mapRotation: _mapRotation),
-                      ),
-                    ],
-                  ),
-                // Posts 气泡 - 后渲染，展开的气泡在最上层
-                MarkerLayer(
-                  markers: sortedIndices.map((index) {
-                    final post = posts[index];
-                    final isExpanded = _expandedIndex == index;
-                    final scaleFactor = _scaleFactors[index] ?? 1.0;
-
-                    return Marker(
-                      point: LatLng(
-                        post.location.latitude,
-                        post.location.longitude,
-                      ),
-                      width: MapBubbleWidget.expandedHeight,
-                      height: MapBubbleWidget.expandedHeight,
-                      alignment:
-                          Alignment.bottomCenter, // Tip stays at marker point
-                      child: MapBubbleWidget(
-                        isExpanded: isExpanded,
-                        scaleFactor: scaleFactor,
-                        post: post,
-                        mapRotation: _mapRotation,
-                        onTap: () {
-                          if (isExpanded) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (c) => DetailPage(postId: post.id),
-                              ),
-                            );
-                          } else {
-                            // Manual expand - override auto
-                            BrowsingHistoryService().addToHistory(post);
-                            setState(() {
-                              _manualExpandedIndex = index;
-                              _expandedIndex = index;
-                              _suppressedAutoIndex = null;
-                            });
-                            final cameraSize = _mapController.camera.size;
-                            _mapController.move(
-                              LatLng(
-                                post.location.latitude,
-                                post.location.longitude,
-                              ),
-                              16,
-                              // Center the marker tip within the visible map area.
-                              offset: _expandedBubbleCenterOffset(cameraSize),
-                            );
-                          }
-                        },
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-
+            // 基础地图 Widget（由 Mapbox 适配器构建）
+            MapboxMapWidgetBuilder(
+              styleUri: MapConfig.mapboxStyleUri,
+            ).build(JogyMapOptions(
+              initialCenter: mapCenter,
+              initialZoom: 15.0,
+              initialPitch: 45.0,
+              rotationEnabled: false,
+              onMapCreated: (controller) {
+                setState(() {
+                  _jogyMapController = controller;
+                });
+              },
+              onCameraMove: _onCameraMove,
+              onTap: _onMapTap,
+            )),
+            // 标记覆盖层（仅在地图控制器就绪后渲染）
+            if (_jogyMapController != null &&
+                _jogyMapController!.cameraState.viewportSize.x > 0) ...[
+              // 用户位置标记
+              _buildUserLocationOverlay(),
+              // Posts 气泡标记
+              ...sortedIndices
+                  .map((index) => _buildBubbleOverlay(posts, index)),
+            ],
             // 顶部工具栏：搜索框 + 消息按钮 + 发布按钮
             Positioned(
               top: MediaQuery.of(context).padding.top + 12,
@@ -637,27 +657,24 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                   GestureDetector(
                     onTap: _openMessagePage,
                     child: ClipOval(
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(153), // 60% 不透明度
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(20),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.chat_bubble_outline,
-                            size: 22,
-                            color: Colors.grey[700],
-                          ),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(153), // 60% 不透明度
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(20),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.chat_bubble_outline,
+                          size: 22,
+                          color: Colors.grey[700],
                         ),
                       ),
                     ),
@@ -668,27 +685,24 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                     key: _addButtonKey,
                     onTap: _showAddMenu,
                     child: ClipOval(
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(153), // 60% 不透明度
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(20),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            size: 24,
-                            color: Colors.grey[700],
-                          ),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(153), // 60% 不透明度
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(20),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.add,
+                          size: 24,
+                          color: Colors.grey[700],
                         ),
                       ),
                     ),
@@ -703,7 +717,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               child: LocationButton(
                 onTap: () {
                   if (_userLocation != null) {
-                    _animatedMapMove(_userLocation!, 15);
+                    _jogyMapController?.moveTo(_userLocation!, zoom: 15);
                   }
                 },
               ),
@@ -849,51 +863,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
   }
 
-  // Animated Map Move
-  void _animatedMapMove(LatLng destLocation, double destZoom) {
-    // Create some tweens. These serve to split up the transition from one location to another.
-    // In our case, we want to split the degrees diff along each of the Lat and Lng axes.
-    final latTween = Tween<double>(
-      begin: _mapController.camera.center.latitude,
-      end: destLocation.latitude,
-    );
-    final lngTween = Tween<double>(
-      begin: _mapController.camera.center.longitude,
-      end: destLocation.longitude,
-    );
-    final zoomTween = Tween<double>(
-      begin: _mapController.camera.zoom,
-      end: destZoom,
-    );
-
-    // Create a controller that plays a curve over a duration
-    var controller = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    // The animation determines what path the animation will take. You can try different Curves values, although easeOutFastLinear is what I like.
-    Animation<double> animation = CurvedAnimation(
-      parent: controller,
-      curve: Curves.fastOutSlowIn,
-    );
-
-    controller.addListener(() {
-      _mapController.move(
-        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
-        zoomTween.evaluate(animation),
-      );
-    });
-
-    animation.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        controller.dispose();
-      } else if (status == AnimationStatus.dismissed) {
-        controller.dispose();
-      }
-    });
-
-    controller.forward();
-  }
+  // Mapbox 原生 flyTo 已自带动画，无需手动 Tween
 }
 
 // 用户位置标记 - 使用与气泡缩小时相同的样式，颜色为橙色

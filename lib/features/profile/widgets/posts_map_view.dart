@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import '../../../core/map/map_types.dart';
+import '../../../core/map/map_controller.dart';
+import '../../../core/map/map_widget_builder.dart';
+import '../../../core/map/mapbox/mapbox_map_widget_builder.dart';
 import '../../../data/models/post_model.dart';
 import '../../map/widgets/zoom_arc_control.dart' show LocationButton;
 import '../../../config/map_config.dart';
@@ -16,74 +18,85 @@ class PostsMapView extends StatefulWidget {
   State<PostsMapView> createState() => _PostsMapViewState();
 }
 
-class _PostsMapViewState extends State<PostsMapView>
-    with TickerProviderStateMixin {
-  late MapController _mapController;
+class _PostsMapViewState extends State<PostsMapView> {
+  JogyMapController? _jogyMapController;
   PostModel? _selectedPost;
   double _currentZoom = 13.0;
 
   @override
-  void initState() {
-    super.initState();
-    _mapController = MapController();
-  }
-
-  @override
   void dispose() {
-    _mapController.dispose();
+    _jogyMapController?.dispose();
     super.dispose();
   }
 
-  LatLng _calculateCenter() {
+  MapLatLng _calculateCenter() {
     if (widget.posts.isEmpty) {
-      return const LatLng(31.2304, 121.4737); // Default: Shanghai
+      return const MapLatLng(31.2304, 121.4737); // Default: Shanghai
     }
     double lat = 0, lng = 0;
     for (final post in widget.posts) {
       lat += post.location.latitude;
       lng += post.location.longitude;
     }
-    return LatLng(lat / widget.posts.length, lng / widget.posts.length);
+    return MapLatLng(lat / widget.posts.length, lng / widget.posts.length);
   }
 
-  void _animatedMapMove(LatLng destLocation, double destZoom) {
-    final latTween = Tween<double>(
-      begin: _mapController.camera.center.latitude,
-      end: destLocation.latitude,
-    );
-    final lngTween = Tween<double>(
-      begin: _mapController.camera.center.longitude,
-      end: destLocation.longitude,
-    );
-    final zoomTween = Tween<double>(
-      begin: _mapController.camera.zoom,
-      end: destZoom,
-    );
+  void _onCameraMove(MapCameraEvent event) {
+    if (event.source == MapMoveSource.gesture) {
+      setState(() => _currentZoom = event.camera.zoom);
+    }
+  }
 
-    final controller = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
+  // 构建单个帖子标记覆盖层
+  Widget _buildPostMarkerOverlay(PostModel post) {
+    if (_jogyMapController == null) return const SizedBox.shrink();
+
+    final screenPoint = _jogyMapController!.latLngToScreenPoint(
+      MapLatLng(post.location.latitude, post.location.longitude),
     );
-    final animation = CurvedAnimation(
-      parent: controller,
-      curve: Curves.fastOutSlowIn,
+    if (screenPoint == null) return const SizedBox.shrink();
+
+    final isSelected = _selectedPost?.id == post.id;
+    final markerSize = isSelected ? 60.0 : 50.0;
+
+    return Positioned(
+      left: screenPoint.x - markerSize / 2,
+      top: screenPoint.y - markerSize / 2,
+      width: markerSize,
+      height: markerSize,
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _selectedPost = post);
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected ? Colors.blue : Colors.white,
+              width: isSelected ? 3 : 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: post.imageUrls.isNotEmpty
+                ? Image.network(
+                    post.imageUrls.first,
+                    fit: BoxFit.cover,
+                  )
+                : Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image, size: 24),
+                  ),
+          ),
+        ),
+      ),
     );
-
-    controller.addListener(() {
-      _mapController.move(
-        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
-        zoomTween.evaluate(animation),
-      );
-    });
-
-    animation.addStatusListener((status) {
-      if (status == AnimationStatus.completed ||
-          status == AnimationStatus.dismissed) {
-        controller.dispose();
-      }
-    });
-
-    controller.forward();
   }
 
   @override
@@ -96,75 +109,29 @@ class _PostsMapViewState extends State<PostsMapView>
         height: 400,
         child: Stack(
           children: [
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: center,
-                initialZoom: _currentZoom,
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-                ),
-                onPositionChanged: (position, hasGesture) {
-                  if (hasGesture) {
-                    setState(() => _currentZoom = position.zoom);
-                  }
-                },
-                onTap: (_, __) {
-                  setState(() => _selectedPost = null);
-                },
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: MapConfig.tileUrl,
-                  userAgentPackageName: 'com.jogy.app',
-                ),
-                MarkerLayer(
-                  markers: widget.posts.map((post) {
-                    final isSelected = _selectedPost?.id == post.id;
-                    return Marker(
-                      point: LatLng(
-                        post.location.latitude,
-                        post.location.longitude,
-                      ),
-                      width: isSelected ? 60 : 50,
-                      height: isSelected ? 60 : 50,
-                      child: GestureDetector(
-                        onTap: () {
-                          setState(() => _selectedPost = post);
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected ? Colors.blue : Colors.white,
-                              width: isSelected ? 3 : 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: post.imageUrls.isNotEmpty
-                                ? Image.network(
-                                    post.imageUrls.first,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Container(
-                                    color: Colors.grey[300],
-                                    child: const Icon(Icons.image, size: 24),
-                                  ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
+            // 基础地图 Widget
+            MapboxMapWidgetBuilder(
+              styleUri: MapConfig.mapboxStyleUri,
+            ).build(JogyMapOptions(
+              initialCenter: center,
+              initialZoom: _currentZoom,
+              initialPitch: 0,
+              rotationEnabled: false,
+              onMapCreated: (controller) {
+                setState(() {
+                  _jogyMapController = controller;
+                });
+              },
+              onCameraMove: _onCameraMove,
+              onTap: (_) {
+                setState(() => _selectedPost = null);
+              },
+            )),
+            // 帖子标记覆盖层
+            if (_jogyMapController != null &&
+                _jogyMapController!.cameraState.viewportSize.x > 0)
+              ...widget.posts
+                  .map((post) => _buildPostMarkerOverlay(post)),
             // Selected post preview card
             if (_selectedPost != null)
               Positioned(
@@ -262,7 +229,10 @@ class _PostsMapViewState extends State<PostsMapView>
               bottom: 12,
               child: LocationButton(
                 onTap: () {
-                  _animatedMapMove(_calculateCenter(), _currentZoom);
+                  _jogyMapController?.moveTo(
+                    _calculateCenter(),
+                    zoom: _currentZoom,
+                  );
                 },
               ),
             ),
