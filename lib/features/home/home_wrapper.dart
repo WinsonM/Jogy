@@ -44,6 +44,7 @@ class _HomeWrapperState extends State<HomeWrapper> {
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
         messageBadgeCount: _messageUnreadCount,
+        useBlur: _currentIndex != 0,
       ),
     );
   }

@@ -1,10 +1,12 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
-class GlassBottomNavBar extends StatelessWidget {
+class GlassBottomNavBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final VoidCallback? onMyTap;
   final int messageBadgeCount;
+  final bool useBlur;
 
   const GlassBottomNavBar({
     super.key,
@@ -12,7 +14,15 @@ class GlassBottomNavBar extends StatelessWidget {
     required this.onTap,
     this.onMyTap,
     this.messageBadgeCount = 0,
+    this.useBlur = true,
   });
+
+  @override
+  State<GlassBottomNavBar> createState() => _GlassBottomNavBarState();
+}
+
+class _GlassBottomNavBarState extends State<GlassBottomNavBar> {
+  final GlobalKey _contentKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +42,75 @@ class GlassBottomNavBar extends StatelessWidget {
         final double itemWidth = totalInnerWidth / 3;
 
         // 计算选中指示器的位置
-        double indicatorLeft = currentIndex * itemWidth;
+        double indicatorLeft = widget.currentIndex * itemWidth;
+
+        Widget contentContainer = Container(
+          key: _contentKey,
+          height: 80,
+          decoration: BoxDecoration(
+            color: widget.useBlur ? Colors.white.withAlpha(200) : Colors.white.withAlpha(240),
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(20),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
+          child: Stack(
+            children: [
+              // 滑动选中指示器背景
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                left: indicatorLeft,
+                top: 0,
+                bottom: 0,
+                width: itemWidth,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(32),
+                  ),
+                ),
+              ),
+              // 导航项 Row - 使用透明背景
+              Row(
+                children: [
+                  _buildNavItem(
+                    index: 0,
+                    filledIcon: Icons.home,
+                    outlinedIcon: Icons.home_outlined,
+                    label: '主页',
+                    isSelected: widget.currentIndex == 0,
+                  ),
+                  _buildNavItem(
+                    index: 1,
+                    filledIcon: Icons.chat_bubble,
+                    outlinedIcon: Icons.chat_bubble_outline,
+                    label: '消息',
+                    isSelected: widget.currentIndex == 1,
+                    badgeCount: widget.messageBadgeCount,
+                  ),
+                  // "我的"按钮
+                  _buildNavItem(
+                    index: 2,
+                    filledIcon: Icons.person,
+                    outlinedIcon: Icons.person_outline,
+                    label: '我的',
+                    isSelected: widget.currentIndex == 2,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
 
         return Align(
           alignment: Alignment.bottomCenter,
@@ -40,81 +118,12 @@ class GlassBottomNavBar extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(40),
-              child: Container(
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(200),
-                  borderRadius: BorderRadius.circular(40),
-                  border: Border.all(
-                    color: Colors.white.withAlpha(105),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(20),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                    BoxShadow(
-                      color: Colors.white.withAlpha(90),
-                      blurRadius: 8,
-                      offset: const Offset(0, -1),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
-                ),
-                child: Stack(
-                  children: [
-                    // 滑动选中指示器背景
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                      left: indicatorLeft,
-                      top: 0,
-                      bottom: 0,
-                      width: itemWidth,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(32),
-                        ),
-                      ),
-                    ),
-                    // 导航项 Row - 使用透明背景
-                    Row(
-                      children: [
-                        _buildNavItem(
-                          index: 0,
-                          filledIcon: Icons.home,
-                          outlinedIcon: Icons.home_outlined,
-                          label: '主页',
-                          isSelected: currentIndex == 0,
-                        ),
-                        _buildNavItem(
-                          index: 1,
-                          filledIcon: Icons.chat_bubble,
-                          outlinedIcon: Icons.chat_bubble_outline,
-                          label: '消息',
-                          isSelected: currentIndex == 1,
-                          badgeCount: messageBadgeCount,
-                        ),
-                        // "我的"按钮
-                        _buildNavItem(
-                          index: 2,
-                          filledIcon: Icons.person,
-                          outlinedIcon: Icons.person_outline,
-                          label: '我的',
-                          isSelected: currentIndex == 2,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              child: widget.useBlur
+                  ? BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: contentContainer,
+                    )
+                  : contentContainer,
             ),
           ),
         );
@@ -138,7 +147,7 @@ class GlassBottomNavBar extends StatelessWidget {
     return Expanded(
       flex: 1,
       child: GestureDetector(
-        onTap: index >= 0 ? () => onTap(index) : onCustomTap,
+        onTap: index >= 0 ? () => widget.onTap(index) : onCustomTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),

@@ -626,22 +626,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                         child: Container(
                           height: 50,
                           decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(210),
+                            color: Colors.white.withAlpha(240),
                             borderRadius: BorderRadius.circular(25),
-                            border: Border.all(
-                              color: Colors.white.withAlpha(105),
-                              width: 1,
-                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withAlpha(20),
                                 blurRadius: 10,
                                 offset: const Offset(0, 2),
-                              ),
-                              BoxShadow(
-                                color: Colors.white.withAlpha(90),
-                                blurRadius: 8,
-                                offset: const Offset(0, -1),
                               ),
                             ],
                           ),
@@ -671,27 +662,19 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                   // 消息按钮
                   GestureDetector(
                     onTap: _openMessagePage,
-                    child: ClipOval(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(22),
                       child: Container(
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(200),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withAlpha(105),
-                            width: 1,
-                          ),
+                          color: Colors.white.withAlpha(240),
+                          borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withAlpha(20),
                               blurRadius: 10,
                               offset: const Offset(0, 2),
-                            ),
-                            BoxShadow(
-                              color: Colors.white.withAlpha(90),
-                              blurRadius: 8,
-                              offset: const Offset(0, -1),
                             ),
                           ],
                         ),
@@ -708,27 +691,19 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                   GestureDetector(
                     key: _addButtonKey,
                     onTap: _showAddMenu,
-                    child: ClipOval(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(22),
                       child: Container(
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(200),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withAlpha(105),
-                            width: 1,
-                          ),
+                          color: Colors.white.withAlpha(240),
+                          borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withAlpha(20),
                               blurRadius: 10,
                               offset: const Offset(0, 2),
-                            ),
-                            BoxShadow(
-                              color: Colors.white.withAlpha(90),
-                              blurRadius: 8,
-                              offset: const Offset(0, -1),
                             ),
                           ],
                         ),
