@@ -12,7 +12,7 @@ void main() async {
   
   runApp(
     ChangeNotifierProvider(
-      create: (_) => PostProvider(PostRepositoryImpl())..fetchPosts(),
+      create: (_) => PostProvider(PostRepositoryImpl()),
       child: const MyApp(),
     ),
   );

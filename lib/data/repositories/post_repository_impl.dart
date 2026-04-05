@@ -26,6 +26,23 @@ class PostRepositoryImpl implements PostRepository {
     return await MockDataSource.fetchPosts();
   }
 
+  @override
+  Future<List<PostModel>> getPostsByBounds({
+    required double minLatitude,
+    required double minLongitude,
+    required double maxLatitude,
+    required double maxLongitude,
+  }) async {
+    // Mock 阶段：使用 MockDataSource 过滤
+    // 后端阶段：切换到 RemoteDataSource.fetchDiscoverPosts()
+    return await MockDataSource.fetchPostsByBounds(
+      minLatitude: minLatitude,
+      minLongitude: minLongitude,
+      maxLatitude: maxLatitude,
+      maxLongitude: maxLongitude,
+    );
+  }
+
   // Calculate distance between two points in kilometers using Haversine formula
   double _calculateDistance(
     double lat1,

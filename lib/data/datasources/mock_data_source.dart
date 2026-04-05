@@ -15,6 +15,16 @@ class MockDataSource {
     _centerLng = lng;
   }
 
+  // 获取当前中心点位置（用于 GPS 不可用时的 fallback）
+  static LocationModel getCenter() {
+    return LocationModel(
+      latitude: _centerLat,
+      longitude: _centerLng,
+      placeName: 'Current Center',
+      address: '',
+    );
+  }
+
   // 在中心点周围生成随机偏移（已移除随机偏移，改为精确位置）
   static LocationModel _randomLocationNear(String placeName, String address) {
     // 移除随机偏移，直接返回中心点附近的一个确定位置（或者直接返回中心点）
@@ -288,6 +298,24 @@ class MockDataSource {
     // Simulate network delay
     await Future.delayed(const Duration(milliseconds: 500));
     return getPosts();
+  }
+
+  /// 根据可视范围过滤 mock posts
+  static Future<List<PostModel>> fetchPostsByBounds({
+    required double minLatitude,
+    required double minLongitude,
+    required double maxLatitude,
+    required double maxLongitude,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return getPosts().where((post) {
+      final lat = post.location.latitude;
+      final lng = post.location.longitude;
+      return lat >= minLatitude &&
+          lat <= maxLatitude &&
+          lng >= minLongitude &&
+          lng <= maxLongitude;
+    }).toList();
   }
 
   static Future<PostModel?> getPostById(String id) async {

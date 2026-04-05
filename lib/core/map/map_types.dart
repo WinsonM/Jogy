@@ -74,6 +74,27 @@ class MapCameraEvent {
   });
 }
 
+/// 地图可视范围（西南角 + 东北角）
+class MapBounds {
+  final MapLatLng southwest;
+  final MapLatLng northeast;
+
+  const MapBounds({required this.southwest, required this.northeast});
+
+  double get minLatitude => southwest.latitude;
+  double get minLongitude => southwest.longitude;
+  double get maxLatitude => northeast.latitude;
+  double get maxLongitude => northeast.longitude;
+
+  MapLatLng get center => MapLatLng(
+        (southwest.latitude + northeast.latitude) / 2,
+        (southwest.longitude + northeast.longitude) / 2,
+      );
+
+  @override
+  String toString() => 'MapBounds(sw: $southwest, ne: $northeast)';
+}
+
 /// 地图提供商枚举
 enum MapProviderType {
   mapbox,

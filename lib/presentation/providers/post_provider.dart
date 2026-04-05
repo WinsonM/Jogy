@@ -34,6 +34,58 @@ class PostProvider extends ChangeNotifier {
     }
   }
 
+  /// 根据位置获取帖子（用于初次定位后加载）
+  Future<void> fetchPostsByLocation({
+    required double latitude,
+    required double longitude,
+    double radiusInKm = 10.0,
+  }) async {
+    try {
+      _isLoading = _posts.isEmpty; // 仅首次加载时显示 loading
+      _error = null;
+      if (_isLoading) notifyListeners();
+
+      _posts = await _repository.getPostsByLocation(
+        latitude: latitude,
+        longitude: longitude,
+        radiusInKm: radiusInKm,
+      );
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// 根据可视范围获取帖子（用于地图滑动后刷新）
+  Future<void> fetchPostsByBounds({
+    required double minLatitude,
+    required double minLongitude,
+    required double maxLatitude,
+    required double maxLongitude,
+  }) async {
+    try {
+      _error = null;
+      // 不设 _isLoading，避免地图被销毁重建
+
+      final newPosts = await _repository.getPostsByBounds(
+        minLatitude: minLatitude,
+        minLongitude: minLongitude,
+        maxLatitude: maxLatitude,
+        maxLongitude: maxLongitude,
+      );
+
+      _posts = newPosts;
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      // 静默失败，保留当前 posts
+    }
+  }
+
   Future<PostModel?> getPostById(String id) async {
     try {
       return await _repository.getPostById(id);

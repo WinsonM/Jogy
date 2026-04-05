@@ -79,6 +79,8 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
   void _onMapLoaded(mapbox.MapLoadedEventData event) {
     _updateCameraState(MapMoveSource.programmatic);
+    // 地图加载完成后启用原生定位 puck
+    _controller?.enableLocationPuck();
   }
 
   void _onMapIdle(mapbox.MapIdleEventData event) {

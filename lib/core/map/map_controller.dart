@@ -27,10 +27,23 @@ abstract class JogyMapController {
   ///
   /// 将经纬度转换为当前视口中的像素坐标。
   /// 用于在 Stack overlay 中定位 Flutter widget（如气泡标记）。
+  /// 经纬度转屏幕坐标（可能因实现而产生逼近误差）
   MapScreenPoint? latLngToScreenPoint(MapLatLng latLng);
+
+  /// 异步精确经纬度转屏幕坐标（利用原生引擎完整管线解析，包含3D等特性）
+  Future<MapScreenPoint?> latLngToScreenPointAsync(MapLatLng latLng) async {
+    // 默认回退到同步的计算，适配器可覆盖
+    return latLngToScreenPoint(latLng);
+  }
 
   /// 屏幕坐标 → 地理坐标
   MapLatLng? screenPointToLatLng(MapScreenPoint point);
+
+  /// 获取当前可视范围（西南角 + 东北角）
+  Future<MapBounds?> getVisibleBounds();
+
+  /// 启用原生定位 puck（蓝色圆点）
+  Future<void> enableLocationPuck();
 
   /// 释放资源
   void dispose();

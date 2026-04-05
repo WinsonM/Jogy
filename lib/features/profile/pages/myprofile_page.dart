@@ -522,12 +522,12 @@ class _MyProfilePageState extends State<MyProfilePage> {
               ],
             ),
           ),
-          // 固定 Tab 后的顶部蒙版，遮住滚动内容
+          // 固定 Tab 后的顶部蒙版，遮住滚动内容（覆盖设置按钮 + Tab 栏区域）
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            height: topPadding + 64,
+            height: topPadding + 120,
             child: IgnorePointer(
               ignoring: !_isTabPinned,
               child: AnimatedOpacity(
@@ -536,7 +536,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 child: ClipRect(
                   child: BackdropFilter(
                     filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                    child: Container(color: Colors.white.withAlpha(230)),
+                    child: Container(color: Colors.white.withAlpha(180)),
                   ),
                 ),
               ),

@@ -68,7 +68,8 @@ class MapboxMapController implements JogyMapController {
     final vh = state.viewportSize.y;
     if (vw == 0 || vh == 0) return null;
 
-    final scale = 256.0 * math.pow(2, state.zoom);
+    // Mapbox 底层投影使用 size=512 作为 zoom 0 的基准
+    final scale = 512.0 * math.pow(2, state.zoom);
 
     final centerPx = _latLngToMercator(state.center, scale);
     final pointPx = _latLngToMercator(latLng, scale);
@@ -77,20 +78,21 @@ class MapboxMapController implements JogyMapController {
     var dx = pointPx.x - centerPx.x;
     var dy = pointPx.y - centerPx.y;
     if (state.bearing != 0) {
-      final rad = -state.bearing * math.pi / 180;
+      final rad = state.bearing * math.pi / 180; // 修复：顺时针旋转，屏幕系内相当于向量逆时针旋转
       final cosR = math.cos(rad);
       final sinR = math.sin(rad);
-      final rx = dx * cosR - dy * sinR;
-      final ry = dx * sinR + dy * cosR;
+      final rx = dx * cosR + dy * sinR;
+      final ry = -dx * sinR + dy * cosR;
       dx = rx;
       dy = ry;
     }
 
-    // 考虑 pitch 时的透视缩放（简化）
-    // pitch 会让远处的点靠近地平线，这里用余弦近似
+    // 3D Pitch 投影近似修正
+    // 在倾斜视角下，Y轴距离会根据透视缩短。在中心点附近的简单近似
     if (state.pitch > 0) {
-      final pitchFactor = math.cos(state.pitch * math.pi / 180);
-      dy *= pitchFactor;
+      final pitchRad = state.pitch * math.pi / 180;
+      // 简单近似：将 Y 轴的距离压缩
+      dy *= math.cos(pitchRad);
     }
 
     return MapScreenPoint(dx + vw / 2, dy + vh / 2);
@@ -126,6 +128,68 @@ class MapboxMapController implements JogyMapController {
       return MapLatLng(pos.lat.toDouble(), pos.lng.toDouble());
     } catch (_) {
       return null;
+    }
+  }
+
+  @override
+  Future<MapBounds?> getVisibleBounds() async {
+    try {
+      final state = _lastCameraState;
+      final vw = state.viewportSize.x;
+      final vh = state.viewportSize.y;
+      if (vw == 0 || vh == 0) return null;
+
+      // 查询屏幕四角对应的地理坐标
+      final topLeft = await _mapboxMap.coordinateForPixel(
+        mapbox.ScreenCoordinate(x: 0, y: 0),
+      );
+      final topRight = await _mapboxMap.coordinateForPixel(
+        mapbox.ScreenCoordinate(x: vw, y: 0),
+      );
+      final bottomLeft = await _mapboxMap.coordinateForPixel(
+        mapbox.ScreenCoordinate(x: 0, y: vh),
+      );
+      final bottomRight = await _mapboxMap.coordinateForPixel(
+        mapbox.ScreenCoordinate(x: vw, y: vh),
+      );
+
+      final lats = [
+        topLeft.coordinates.lat.toDouble(),
+        topRight.coordinates.lat.toDouble(),
+        bottomLeft.coordinates.lat.toDouble(),
+        bottomRight.coordinates.lat.toDouble(),
+      ];
+      final lngs = [
+        topLeft.coordinates.lng.toDouble(),
+        topRight.coordinates.lng.toDouble(),
+        bottomLeft.coordinates.lng.toDouble(),
+        bottomRight.coordinates.lng.toDouble(),
+      ];
+
+      return MapBounds(
+        southwest: MapLatLng(lats.reduce(math.min), lngs.reduce(math.min)),
+        northeast: MapLatLng(lats.reduce(math.max), lngs.reduce(math.max)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> enableLocationPuck() async {
+    try {
+      await _mapboxMap.location.updateSettings(
+        mapbox.LocationComponentSettings(
+          enabled: true,
+          pulsingEnabled: true,
+          showAccuracyRing: false,
+          locationPuck: mapbox.LocationPuck(
+            locationPuck2D: mapbox.DefaultLocationPuck2D(),
+          ),
+        ),
+      );
+    } catch (_) {
+      // 定位组件启用失败（权限等原因），静默处理
     }
   }
 

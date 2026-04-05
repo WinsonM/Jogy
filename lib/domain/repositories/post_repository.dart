@@ -8,4 +8,12 @@ abstract class PostRepository {
     required double longitude,
     double radiusInKm = 10.0,
   });
+
+  /// 根据可视范围获取帖子（用于地图视口刷新）
+  Future<List<PostModel>> getPostsByBounds({
+    required double minLatitude,
+    required double minLongitude,
+    required double maxLatitude,
+    required double maxLongitude,
+  });
 }

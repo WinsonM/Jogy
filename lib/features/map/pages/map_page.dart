@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import '../../../../core/database/database_helper.dart';
@@ -54,9 +55,20 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
 
+  // 精确的真实屏幕坐标缓存（使用原生 Mapbox SDK 异步映射）
+  final Map<String, MapScreenPoint> _postScreenPoints = {};
+  bool _isUpdatingPositions = false;
+  bool _needsPositionUpdate = false; // 当更新被跳过时标记需要重试
+
   // 用户位置相关
   MapLatLng? _userLocation;
   bool _locationLoading = true;
+
+  // 记录上一次 posts 的签名，用于检测 posts 刷新后重新计算屏幕坐标
+  String _lastPostsSignature = '';
+
+  // 滑动防抖计时器，用于在用户停止滑动后刷新 posts
+  Timer? _cameraMoveDebounce;
 
   final GlobalKey _addButtonKey = GlobalKey();
 
@@ -66,11 +78,18 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     _getCurrentLocation();
   }
 
+  @override
+  void dispose() {
+    _cameraMoveDebounce?.cancel();
+    super.dispose();
+  }
+
   Future<void> _getCurrentLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() => _locationLoading = false);
+        _showLocationPermissionDialog('定位服务未开启，请在系统设置中开启定位服务。');
+        _useFallbackLocation();
         return;
       }
 
@@ -78,13 +97,15 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() => _locationLoading = false);
+          _showLocationPermissionDialog('需要定位权限才能显示您附近的内容。请允许 Jogy 访问您的位置。');
+          _useFallbackLocation();
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(() => _locationLoading = false);
+        _showLocationPermissionDialog('定位权限已被永久拒绝，请前往系统设置手动开启。');
+        _useFallbackLocation();
         return;
       }
 
@@ -102,14 +123,61 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         _locationLoading = false;
       });
 
-      // 刷新 posts 以使用新的位置
+      // 根据用户位置获取附近的 posts
       if (mounted) {
-        Provider.of<PostProvider>(context, listen: false).fetchPosts();
+        Provider.of<PostProvider>(context, listen: false).fetchPostsByLocation(
+          latitude: position.latitude,
+          longitude: position.longitude,
+        );
       }
     } catch (e) {
       print('获取位置失败: $e');
-      setState(() => _locationLoading = false);
+      _useFallbackLocation();
     }
+  }
+
+  /// GPS 不可用时，使用 MockDataSource 的中心点作为用户位置
+  void _useFallbackLocation() {
+    final fallback = MockDataSource.getCenter();
+    setState(() {
+      _userLocation = MapLatLng(fallback.latitude, fallback.longitude);
+      _locationLoading = false;
+    });
+    // 使用 fallback 位置加载 posts
+    if (mounted) {
+      Provider.of<PostProvider>(context, listen: false).fetchPostsByLocation(
+        latitude: fallback.latitude,
+        longitude: fallback.longitude,
+      );
+    }
+  }
+
+  /// 弹出定位权限提示对话框
+  void _showLocationPermissionDialog(String message) {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('需要定位权限'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('暂不开启'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Geolocator.openAppSettings();
+              },
+              child: const Text('前往设置'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   // 计算”理想尖角位置”（用于自动展开判断和点击居中），只依赖屏幕尺寸，
@@ -223,6 +291,56 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       }
     } catch (e) {
       print('Scale update error: $e');
+    }
+  }
+
+  // 异步获取 Mapbox 引擎底层原生坐标（完美贴合 3D Pitch 和偏航）
+  Future<void> _updatePostPositionsAsync() async {
+    if (_jogyMapController == null) return;
+
+    // 如果正在更新，标记需要重试，而不是直接丢弃
+    if (_isUpdatingPositions) {
+      _needsPositionUpdate = true;
+      return;
+    }
+
+    final posts = Provider.of<PostProvider>(context, listen: false).posts;
+    if (posts.isEmpty) return;
+
+    _isUpdatingPositions = true;
+    _needsPositionUpdate = false;
+    try {
+      final futures = posts.map((post) async {
+        final pt = await _jogyMapController!.latLngToScreenPointAsync(
+          MapLatLng(post.location.latitude, post.location.longitude),
+        );
+        return MapEntry(post.id, pt);
+      });
+      final entries = await Future.wait(futures);
+
+      if (mounted) {
+        bool needsUpdate = false;
+        for (var entry in entries) {
+          if (entry.value != null) {
+            final old = _postScreenPoints[entry.key];
+            if (old == null || old.x != entry.value!.x || old.y != entry.value!.y) {
+              _postScreenPoints[entry.key] = entry.value!;
+              needsUpdate = true;
+            }
+          }
+        }
+        if (needsUpdate) {
+          setState(() {});
+          _updateScaleFactors(); // Refresh scale when coords arrive
+        }
+      }
+    } finally {
+      _isUpdatingPositions = false;
+      // 如果在更新期间有被跳过的请求，立即重试
+      if (_needsPositionUpdate && mounted) {
+        _needsPositionUpdate = false;
+        _updatePostPositionsAsync();
+      }
     }
   }
 
@@ -441,8 +559,32 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     if (_currentZoom != event.camera.zoom) {
       _currentZoom = event.camera.zoom;
     }
-    // Update scale factors when map moves
-    _updateScaleFactors();
+    // Update marker positions using the precise async coordinates approach
+    _updatePostPositionsAsync();
+
+    // 用户手势滑动时，防抖 500ms 后根据新视口刷新 posts
+    if (event.source == MapMoveSource.gesture) {
+      _cameraMoveDebounce?.cancel();
+      _cameraMoveDebounce = Timer(const Duration(milliseconds: 500), () {
+        _refreshPostsForCurrentViewport();
+      });
+    }
+  }
+
+  /// 根据当前地图视口刷新 posts
+  Future<void> _refreshPostsForCurrentViewport() async {
+    final controller = _jogyMapController;
+    if (controller == null) return;
+
+    final bounds = await controller.getVisibleBounds();
+    if (bounds == null || !mounted) return;
+
+    Provider.of<PostProvider>(context, listen: false).fetchPostsByBounds(
+      minLatitude: bounds.minLatitude,
+      minLongitude: bounds.minLongitude,
+      maxLatitude: bounds.maxLatitude,
+      maxLongitude: bounds.maxLongitude,
+    );
   }
 
   // 地图点击回调
@@ -456,33 +598,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     });
   }
 
-  // 构建用户位置覆盖层
-  Widget _buildUserLocationOverlay() {
-    if (_userLocation == null || _jogyMapController == null) {
-      return const SizedBox.shrink();
-    }
-    final screenPoint = _jogyMapController!.latLngToScreenPoint(_userLocation!);
-    if (screenPoint == null) return const SizedBox.shrink();
-
-    const size = MapBubbleWidget.collapsedSize;
-    return Positioned(
-      left: screenPoint.x - size / 2,
-      top: screenPoint.y - size,
-      width: size,
-      height: size,
-      child: _UserLocationMarker(mapRotation: _mapRotation),
-    );
-  }
-
   // 构建单个气泡覆盖层
   Widget _buildBubbleOverlay(List<PostModel> posts, int index) {
     final post = posts[index];
     final isExpanded = _expandedIndex == index;
     final scaleFactor = _scaleFactors[index] ?? 1.0;
 
-    final screenPoint = _jogyMapController?.latLngToScreenPoint(
-      MapLatLng(post.location.latitude, post.location.longitude),
-    );
+    // Use highly accurate asynchronously pre-fetched native Mapbox screen point
+    final screenPoint = _postScreenPoints[post.id];
     if (screenPoint == null) return const SizedBox.shrink();
 
     // Alignment: bottomCenter - 尖角在地理坐标位置
@@ -545,11 +668,12 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
     return Consumer<PostProvider>(
       builder: (context, postProvider, child) {
-        if (postProvider.isLoading) {
+        // 首次加载时显示加载指示器，后续刷新时保持地图不销毁
+        if (postProvider.isLoading && postProvider.posts.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (postProvider.error != null) {
+        if (postProvider.error != null && postProvider.posts.isEmpty) {
           return Center(child: Text('Error: ${postProvider.error}'));
         }
 
@@ -562,8 +686,22 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           }
         }
 
-        if (posts.isEmpty) {
-          return const Center(child: Text('No posts found'));
+        // posts 为空时：可能是首次加载尚未完成，显示地图（不显示 "No posts found"）
+        // 地图会在 posts 到达后通过 Consumer rebuild 自动显示气泡
+
+        // Posts 刷新后（坐标变化），重新计算屏幕坐标
+        final postsSignature = posts.isEmpty
+            ? ''
+            : '${posts.length}_${posts[0].location.latitude}_${posts[0].location.longitude}';
+        if (_lastPostsSignature != postsSignature) {
+          _lastPostsSignature = postsSignature;
+          // 帧结束后触发，避免在 build 中调用 setState
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _jogyMapController != null) {
+              _postScreenPoints.clear();
+              _updatePostPositionsAsync();
+            }
+          });
         }
 
         // Sort markers: expanded bubble on top (rendered last)
@@ -576,10 +714,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           });
         }
 
-        // 使用用户位置作为中心，如果获取失败则使用第一个 post 位置
-        final mapCenter =
-            _userLocation ??
-            MapLatLng(posts[0].location.latitude, posts[0].location.longitude);
+        // 使用用户位置作为中心，如果获取失败则使用第一个 post 位置或 fallback
+        final mapCenter = _userLocation ??
+            (posts.isNotEmpty
+                ? MapLatLng(posts[0].location.latitude, posts[0].location.longitude)
+                : const MapLatLng(39.9042, 116.4074));
 
         return Stack(
           children: [
@@ -598,14 +737,15 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                       controller.cameraState.viewportSize.x > 0 &&
                       controller.cameraState.viewportSize.y > 0;
                 });
+                // Initialize bubble positions
+                _updatePostPositionsAsync();
               },
               onCameraMove: _onCameraMove,
               onTap: _onMapTap,
             )),
             // 标记覆盖层（仅在地图控制器就绪后渲染）
+            // 用户位置由 Mapbox 原生 location puck 显示，无需 Flutter overlay
             if (_jogyMapController != null && _isViewportReady) ...[
-              // 用户位置标记
-              _buildUserLocationOverlay(),
               // Posts 气泡标记
               ...sortedIndices
                   .map((index) => _buildBubbleOverlay(posts, index)),
@@ -872,75 +1012,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   // Mapbox 原生 flyTo 已自带动画，无需手动 Tween
-}
-
-// 用户位置标记 - 使用与气泡缩小时相同的样式，颜色为橙色
-class _UserLocationMarker extends StatelessWidget {
-  final double mapRotation;
-
-  const _UserLocationMarker({this.mapRotation = 0.0});
-
-  @override
-  Widget build(BuildContext context) {
-    const double size = MapBubbleWidget.collapsedSize;
-    return Transform.rotate(
-      angle: -mapRotation, // 反向旋转保持垂直
-      alignment: Alignment.bottomCenter, // 以底部尖端为中心
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: CustomPaint(
-          size: Size(size, size),
-          painter: _UserBubblePainter(color: Colors.orange),
-        ),
-      ),
-    );
-  }
-}
-
-// 用户气泡画笔 - 与 MapBubble 缩小状态相同的形状
-class _UserBubblePainter extends CustomPainter {
-  final Color color;
-
-  _UserBubblePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final path = _buildCollapsedBubblePath(size);
-
-    // 绘制阴影
-    canvas.drawShadow(path, Colors.black.withOpacity(0.15), 10.0, true);
-    // 绘制气泡
-    canvas.drawPath(path, paint);
-  }
-
-  ui.Path _buildCollapsedBubblePath(Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // 圆形部分
-    final circlePath = ui.Path()
-      ..addOval(
-        Rect.fromCircle(center: Offset(w / 2, h / 2 - 5), radius: w / 2 - 5),
-      );
-
-    // 箭头部分
-    final arrowHeight = MapBubbleWidget.arrowHeight;
-    final arrow = ui.Path()
-      ..moveTo(w / 2 - 8, h - arrowHeight)
-      ..lineTo(w / 2, h)
-      ..lineTo(w / 2 + 8, h - arrowHeight)
-      ..close();
-
-    return ui.Path.combine(ui.PathOperation.union, circlePath, arrow);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // 消息发布界面内容
