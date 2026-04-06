@@ -31,13 +31,13 @@ class PostModel {
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
     return PostModel(
-      id: json['id'] as String,
+      id: json['id'].toString(),
       user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
       location: LocationModel.fromJson(
         json['location'] as Map<String, dynamic>,
       ),
-      content: json['content'] as String,
-      imageUrls: (json['imageUrls'] as List<dynamic>).cast<String>(),
+      content: json['content'] as String? ?? '',
+      imageUrls: (json['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [],
       likes: json['likes'] as int? ?? 0,
       isLiked: json['isLiked'] as bool? ?? false,
       favorites: json['favorites'] as int? ?? 0,
@@ -47,7 +47,7 @@ class PostModel {
               ?.map((e) => CommentModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: DateTime.parse(json['createdAt'].toString()),
     );
   }
 

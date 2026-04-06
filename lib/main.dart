@@ -3,16 +3,21 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'features/home/home_wrapper.dart';
 import 'data/repositories/post_repository_impl.dart';
+import 'data/datasources/remote_data_source.dart';
 import 'presentation/providers/post_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
-  
+
+  final remoteDataSource = RemoteDataSource();
+
   runApp(
     ChangeNotifierProvider(
-      create: (_) => PostProvider(PostRepositoryImpl()),
+      create: (_) => PostProvider(
+        PostRepositoryImpl(remoteDataSource: remoteDataSource),
+      ),
       child: const MyApp(),
     ),
   );

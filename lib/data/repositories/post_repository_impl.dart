@@ -2,18 +2,28 @@ import 'dart:math' as math;
 import '../../domain/repositories/post_repository.dart';
 import '../models/post_model.dart';
 import '../datasources/mock_data_source.dart';
+import '../datasources/remote_data_source.dart';
 
 class PostRepositoryImpl implements PostRepository {
-  PostRepositoryImpl();
+  final RemoteDataSource _remoteDataSource;
+
+  PostRepositoryImpl({RemoteDataSource? remoteDataSource})
+      : _remoteDataSource = remoteDataSource ?? RemoteDataSource();
 
   @override
   Future<List<PostModel>> getPosts() async {
+    // Fallback to mock data for now
     return await MockDataSource.fetchPosts();
   }
 
   @override
   Future<PostModel?> getPostById(String id) async {
-    return await MockDataSource.getPostById(id);
+    try {
+      return await _remoteDataSource.fetchPostById(id);
+    } catch (e) {
+      // Fallback to mock data if backend is unreachable
+      return await MockDataSource.getPostById(id);
+    }
   }
 
   @override
@@ -22,8 +32,22 @@ class PostRepositoryImpl implements PostRepository {
     required double longitude,
     double radiusInKm = 10.0,
   }) async {
-    // 模拟根据位置获取帖子（暂时直接返回所有帖子）
-    return await MockDataSource.fetchPosts();
+    // Convert radius to approximate bounding box
+    final latDelta = radiusInKm / 111.0; // ~111km per degree latitude
+    final lngDelta =
+        radiusInKm / (111.0 * math.cos(latitude * math.pi / 180));
+
+    try {
+      return await getPostsByBounds(
+        minLatitude: latitude - latDelta,
+        minLongitude: longitude - lngDelta,
+        maxLatitude: latitude + latDelta,
+        maxLongitude: longitude + lngDelta,
+      );
+    } catch (e) {
+      // Fallback to mock data
+      return await MockDataSource.fetchPosts();
+    }
   }
 
   @override
@@ -33,39 +57,26 @@ class PostRepositoryImpl implements PostRepository {
     required double maxLatitude,
     required double maxLongitude,
   }) async {
-    // Mock 阶段：使用 MockDataSource 过滤
-    // 后端阶段：切换到 RemoteDataSource.fetchDiscoverPosts()
-    return await MockDataSource.fetchPostsByBounds(
-      minLatitude: minLatitude,
-      minLongitude: minLongitude,
-      maxLatitude: maxLatitude,
-      maxLongitude: maxLongitude,
-    );
-  }
+    try {
+      final response = await _remoteDataSource.fetchDiscoverPosts(
+        minLatitude: minLatitude,
+        minLongitude: minLongitude,
+        maxLatitude: maxLatitude,
+        maxLongitude: maxLongitude,
+      );
 
-  // Calculate distance between two points in kilometers using Haversine formula
-  double _calculateDistance(
-    double lat1,
-    double lon1,
-    double lat2,
-    double lon2,
-  ) {
-    const R = 6371; // Earth's radius in kilometers
-    final dLat = _toRadians(lat2 - lat1);
-    final dLon = _toRadians(lon2 - lon1);
-
-    final a =
-        math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_toRadians(lat1)) *
-            math.cos(_toRadians(lat2)) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return R * c;
-  }
-
-  double _toRadians(double degrees) {
-    return degrees * math.pi / 180;
+      final postsJson = response['posts'] as List<dynamic>? ?? [];
+      return postsJson
+          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      // Fallback to mock data if backend is unreachable
+      return await MockDataSource.fetchPostsByBounds(
+        minLatitude: minLatitude,
+        minLongitude: minLongitude,
+        maxLatitude: maxLatitude,
+        maxLongitude: maxLongitude,
+      );
+    }
   }
 }
