@@ -1,3 +1,5 @@
+import 'package:jogy_app/core/constants/api_constants.dart';
+
 import 'location_model.dart';
 import 'user_model.dart';
 import 'comment_model.dart';
@@ -37,7 +39,11 @@ class PostModel {
         json['location'] as Map<String, dynamic>,
       ),
       content: json['content'] as String? ?? '',
-      imageUrls: (json['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [],
+      imageUrls: (json['imageUrls'] as List<dynamic>?)
+              ?.cast<String>()
+              .map((url) => ApiConstants.resolveUrl(url))
+              .toList() ??
+          [],
       likes: json['likes'] as int? ?? 0,
       isLiked: json['isLiked'] as bool? ?? false,
       favorites: json['favorites'] as int? ?? 0,

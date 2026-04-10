@@ -1,9 +1,45 @@
 /// API configuration constants for the Jogy backend
 class ApiConstants {
-  // Android模拟器通常使用 10.0.2.2 访问本机 localhost
-  // iOS 模拟器使用 localhost
-  // 真机调试需要填写你电脑的局域网 IP
-  static const String baseUrl = 'http://localhost:8000/api/v1';
+  // 通过编译时参数切换环境，无需改代码：
+  //
+  // 本地开发（默认）:
+  //   flutter run
+  //
+  // Android 模拟器:
+  //   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1
+  //
+  // 真机调试（替换为电脑局域网 IP）:
+  //   flutter run --dart-define=API_BASE_URL=http://192.168.x.x:8000/api/v1
+  //
+  // 生产环境打包:
+  //   flutter build apk --dart-define=API_BASE_URL=https://your-domain.com/api/v1
+  //   flutter build ios --dart-define=API_BASE_URL=https://your-domain.com/api/v1
+  //
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:8000/api/v1',
+  );
+
+  /// Server host (without /api/v1), used for resolving image/file URLs
+  /// e.g. baseUrl = "https://example.com/api/v1" -> serverHost = "https://example.com"
+  static String get serverHost {
+    final uri = Uri.parse(baseUrl);
+    return '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
+  }
+
+  /// WebSocket URL (wss for https, ws for http)
+  static String wsUrl(String token) {
+    final uri = Uri.parse(baseUrl);
+    final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
+    return '$wsScheme://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}/api/v1/ws?token=$token';
+  }
+
+  /// Resolve a relative upload path to a full URL
+  /// e.g. "/uploads/images/xxx.webp" -> "https://example.com/uploads/images/xxx.webp"
+  static String resolveUrl(String path) {
+    if (path.startsWith('http')) return path; // already absolute
+    return '$serverHost$path';
+  }
 
   // Auth endpoints
   static const String login = '$baseUrl/auth/login';
