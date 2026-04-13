@@ -1,24 +1,13 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 /// API configuration constants for the Jogy backend
+///
+/// 所有敏感/个人参数从 .env 文件读取（.env 已在 .gitignore 中）
+/// 提交到 GitHub 的是 .env.example（只有占位符，没有真实值）
 class ApiConstants {
-  // 通过编译时参数切换环境，无需改代码：
-  //
-  // 本地开发（默认）:
-  //   flutter run
-  //
-  // Android 模拟器:
-  //   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1
-  //
-  // 真机调试（替换为电脑局域网 IP）:
-  //   flutter run --dart-define=API_BASE_URL=http://192.168.x.x:8000/api/v1
-  //
-  // 生产环境打包:
-  //   flutter build apk --dart-define=API_BASE_URL=https://your-domain.com/api/v1
-  //   flutter build ios --dart-define=API_BASE_URL=https://your-domain.com/api/v1
-  //
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://localhost:8000/api/v1',
-  );
+  /// 后端 API 地址，从 .env 读取，缺省 fallback 到 localhost
+  static String get baseUrl =>
+      dotenv.env['API_BASE_URL'] ?? 'http://localhost:8000/api/v1';
 
   /// Server host (without /api/v1), used for resolving image/file URLs
   /// e.g. baseUrl = "https://example.com/api/v1" -> serverHost = "https://example.com"
@@ -42,17 +31,17 @@ class ApiConstants {
   }
 
   // Auth endpoints
-  static const String login = '$baseUrl/auth/login';
-  static const String register = '$baseUrl/auth/register';
-  static const String refreshToken = '$baseUrl/auth/refresh';
-  static const String logout = '$baseUrl/auth/logout';
-  static const String sendCode = '$baseUrl/auth/send-code';
-  static const String verifyCode = '$baseUrl/auth/verify-code';
+  static String get login => '$baseUrl/auth/login';
+  static String get register => '$baseUrl/auth/register';
+  static String get refreshToken => '$baseUrl/auth/refresh';
+  static String get logout => '$baseUrl/auth/logout';
+  static String get sendCode => '$baseUrl/auth/send-code';
+  static String get verifyCode => '$baseUrl/auth/verify-code';
 
   // Users endpoints
-  static const String userMe = '$baseUrl/users/me';
-  static const String userMeQr = '$baseUrl/users/me/qr';
-  static const String userMeHistory = '$baseUrl/users/me/history';
+  static String get userMe => '$baseUrl/users/me';
+  static String get userMeQr => '$baseUrl/users/me/qr';
+  static String get userMeHistory => '$baseUrl/users/me/history';
   static String userById(String userId) => '$baseUrl/users/$userId';
   static String userPosts(String userId) => '$baseUrl/users/$userId/posts';
   static String userLikedPosts(String userId) =>
@@ -64,9 +53,9 @@ class ApiConstants {
   static String follow(String userId) => '$baseUrl/users/$userId/follow';
 
   // Posts endpoints
-  static const String posts = '$baseUrl/posts';
-  static const String discover = '$baseUrl/posts/discover';
-  static const String searchPosts = '$baseUrl/posts/search';
+  static String get posts => '$baseUrl/posts';
+  static String get discover => '$baseUrl/posts/discover';
+  static String get searchPosts => '$baseUrl/posts/search';
   static String postById(String id) => '$baseUrl/posts/$id';
 
   // Comments endpoints
@@ -90,8 +79,8 @@ class ApiConstants {
       '$baseUrl/posts/$postId/favorites/me';
 
   // Conversations endpoints
-  static const String conversations = '$baseUrl/conversations';
-  static const String conversationsDirect = '$baseUrl/conversations/direct';
+  static String get conversations => '$baseUrl/conversations';
+  static String get conversationsDirect => '$baseUrl/conversations/direct';
   static String conversationPin(String convId) =>
       '$baseUrl/conversations/$convId/pin';
   static String conversationById(String convId) =>
@@ -102,15 +91,15 @@ class ApiConstants {
       '$baseUrl/conversations/$convId/read';
 
   // Search endpoints
-  static const String searchGlobal = '$baseUrl/search/global';
+  static String get searchGlobal => '$baseUrl/search/global';
 
   // QR endpoints
-  static const String qrResolve = '$baseUrl/qr/resolve';
+  static String get qrResolve => '$baseUrl/qr/resolve';
 
   // Location endpoints
-  static const String locationSync = '$baseUrl/location/sync';
+  static String get locationSync => '$baseUrl/location/sync';
 
   // Upload endpoints
-  static const String uploadImage = '$baseUrl/uploads/image';
-  static const String uploadFile = '$baseUrl/uploads/file';
+  static String get uploadImage => '$baseUrl/uploads/image';
+  static String get uploadFile => '$baseUrl/uploads/file';
 }
