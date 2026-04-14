@@ -124,6 +124,7 @@ class _PostsMapViewState extends State<PostsMapView> {
               initialZoom: _currentZoom,
               initialPitch: 0,
               rotationEnabled: false,
+              followHeadingOnStart: false,
               onMapCreated: (controller) {
                 setState(() {
                   _jogyMapController = controller;

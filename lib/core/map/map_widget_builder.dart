@@ -22,8 +22,9 @@ class JogyMapOptions {
   /// 是否允许倾斜手势
   final bool pitchEnabled;
 
-  /// 是否开启罗盘跟随模式（地图根据手机朝向自动旋转）
-  final bool compassFollowEnabled;
+  /// 是否在地图加载后自动进入 FollowPuck + Heading 模式
+  /// 默认 true（首页地图跟随用户朝向），Profile 地图等设为 false
+  final bool followHeadingOnStart;
 
   /// 地图创建完成回调（返回控制器）
   final void Function(JogyMapController controller)? onMapCreated;
@@ -39,9 +40,9 @@ class JogyMapOptions {
     this.initialZoom = 15.0,
     this.initialPitch = 45.0,
     this.initialBearing = 0,
-    this.rotationEnabled = false,
+    this.rotationEnabled = true,
     this.pitchEnabled = true,
-    this.compassFollowEnabled = false,
+    this.followHeadingOnStart = true,
     this.onMapCreated,
     this.onCameraMove,
     this.onTap,

@@ -23,11 +23,16 @@ abstract class JogyMapController {
     Duration duration = const Duration(milliseconds: 500),
   });
 
+  /// 进入跟随用户位置 + 设备朝向模式
+  ///
+  /// 地图自动居中到用户位置，并根据手机罗盘实时旋转。
+  /// 用户手动拖动地图时 SDK 自动退出此模式。
+  Future<void> followUserWithHeading({double? zoom, double? pitch});
+
   /// 地理坐标 → 屏幕坐标
   ///
   /// 将经纬度转换为当前视口中的像素坐标。
   /// 用于在 Stack overlay 中定位 Flutter widget（如气泡标记）。
-  /// 经纬度转屏幕坐标（可能因实现而产生逼近误差）
   MapScreenPoint? latLngToScreenPoint(MapLatLng latLng);
 
   /// 异步精确经纬度转屏幕坐标（利用原生引擎完整管线解析，包含3D等特性）
@@ -42,9 +47,8 @@ abstract class JogyMapController {
   /// 获取当前可视范围（西南角 + 东北角）
   Future<MapBounds?> getVisibleBounds();
 
-  /// 启用原生定位 puck（蓝色圆点）
-  /// [showHeading] 为 true 时显示设备朝向箭头
-  Future<void> enableLocationPuck({bool showHeading = false});
+  /// 启用原生定位 puck（蓝色圆点 + 朝向箭头）
+  Future<void> enableLocationPuck();
 
   /// 释放资源
   void dispose();

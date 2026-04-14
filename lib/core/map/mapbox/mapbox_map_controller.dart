@@ -14,6 +14,9 @@ class MapboxMapController implements JogyMapController {
   bool _isAnimating = false;
   bool get isAnimating => _isAnimating;
 
+  /// 由 wrapper 注入的回调，用于重新激活 FollowPuck viewport
+  void Function({double? zoom, double? pitch})? onRequestFollowHeading;
+
   MapboxMapController(this._mapboxMap, this._lastCameraState);
 
   /// 获取原生 MapboxMap 实例（仅在需要 Mapbox 特有功能时使用）
@@ -60,6 +63,11 @@ class MapboxMapController implements JogyMapController {
   }
 
   @override
+  Future<void> followUserWithHeading({double? zoom, double? pitch}) async {
+    onRequestFollowHeading?.call(zoom: zoom, pitch: pitch);
+  }
+
+  @override
   MapScreenPoint? latLngToScreenPoint(MapLatLng latLng) {
     // 基于 Web Mercator 投影的同步近似计算
     // 适用于标记定位和自动展开检测等实时计算场景
@@ -99,6 +107,7 @@ class MapboxMapController implements JogyMapController {
   }
 
   /// 异步版本的坐标转换（通过原生 SDK 精确计算）
+  @override
   Future<MapScreenPoint?> latLngToScreenPointAsync(MapLatLng latLng) async {
     try {
       final screenCoord = await _mapboxMap.pixelForCoordinate(
@@ -176,15 +185,15 @@ class MapboxMapController implements JogyMapController {
   }
 
   @override
-  Future<void> enableLocationPuck({bool showHeading = false}) async {
+  Future<void> enableLocationPuck() async {
     try {
       await _mapboxMap.location.updateSettings(
         mapbox.LocationComponentSettings(
           enabled: true,
           pulsingEnabled: true,
           showAccuracyRing: false,
-          puckBearingEnabled: showHeading,
-          puckBearing: showHeading ? mapbox.PuckBearing.HEADING : null,
+          puckBearingEnabled: true,
+          puckBearing: mapbox.PuckBearing.HEADING,
           locationPuck: mapbox.LocationPuck(
             locationPuck2D: mapbox.DefaultLocationPuck2D(),
           ),

@@ -3,7 +3,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import '../map_types.dart';
-import '../map_controller.dart';
 import '../map_widget_builder.dart';
 import 'mapbox_map_controller.dart';
 
@@ -11,6 +10,7 @@ import 'mapbox_map_controller.dart';
 ///
 /// 使用 [mapbox.MapWidget] 构建原生 Mapbox GL 地图。
 /// 支持 3D 建筑、倾斜视角等高级渲染特性。
+/// 默认启用 FollowPuckViewportState + Heading，地图跟随用户位置并随设备朝向旋转。
 class MapboxMapWidgetBuilder implements JogyMapWidgetBuilder {
   /// 自定义 Mapbox 样式 URI
   /// 如果为 null，则使用 Mapbox 默认样式
@@ -44,6 +44,40 @@ class _MapboxMapWrapper extends StatefulWidget {
 class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
   MapboxMapController? _controller;
 
+  /// 当前 viewport 状态。初始为 FollowPuck（跟随用户 + 朝向旋转）。
+  /// 用户手势拖动时 Mapbox SDK 自动切换为 Idle。
+  /// 点击定位按钮时通过 [_activateFollowMode] 重新进入 FollowPuck。
+  mapbox.ViewportState? _viewport;
+
+  @override
+  void initState() {
+    super.initState();
+    // 只有首页地图默认开启 FollowPuck（跟随位置 + 朝向旋转）
+    // Profile 地图等静态场景不需要
+    if (widget.options.followHeadingOnStart) {
+      _viewport = _createFollowPuckViewport();
+    }
+  }
+
+  mapbox.FollowPuckViewportState _createFollowPuckViewport({
+    double? zoom,
+    double? pitch,
+  }) {
+    return mapbox.FollowPuckViewportState(
+      zoom: zoom ?? widget.options.initialZoom,
+      bearing: const mapbox.FollowPuckViewportStateBearingHeading(),
+      pitch: pitch ?? widget.options.initialPitch,
+    );
+  }
+
+  /// 重新激活 FollowPuck viewport（由定位按钮触发）
+  void _activateFollowMode({double? zoom, double? pitch}) {
+    // 创建新的 FollowPuckViewportState 实例，Mapbox 检测到变化后重新应用
+    setStateWithViewportAnimation(() {
+      _viewport = _createFollowPuckViewport(zoom: zoom, pitch: pitch);
+    });
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
@@ -61,11 +95,13 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
     _controller = MapboxMapController(mapboxMap, initialState);
 
+    // 注入回调：让 controller.followUserWithHeading() 能触发 viewport 切换
+    _controller!.onRequestFollowHeading = _activateFollowMode;
+
     // 通知外部地图创建完成
     widget.options.onMapCreated?.call(_controller!);
 
     // 首次创建后立即尝试同步一次相机状态（含视口尺寸）
-    // 如果地图仍在初始化，后续 onMapLoaded/onMapIdle 会再次触发同步。
     _updateCameraState(MapMoveSource.programmatic);
   }
 
@@ -79,7 +115,7 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
   void _onMapLoaded(mapbox.MapLoadedEventData event) {
     _updateCameraState(MapMoveSource.programmatic);
-    // 地图加载完成后启用原生定位 puck
+    // 地图加载完成后启用原生定位 puck（带朝向箭头）
     _controller?.enableLocationPuck();
   }
 
@@ -131,15 +167,6 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
   Widget build(BuildContext context) {
     final center = widget.options.initialCenter;
 
-    // 罗盘跟随模式：使用 FollowPuckViewportState 让地图跟随设备朝向
-    final mapbox.ViewportState? viewport = widget.options.compassFollowEnabled
-        ? mapbox.FollowPuckViewportState(
-            zoom: widget.options.initialZoom,
-            bearing: const mapbox.FollowPuckViewportStateBearingHeading(),
-            pitch: widget.options.initialPitch,
-          )
-        : null;
-
     return mapbox.MapWidget(
       styleUri: widget.styleUri ?? mapbox.MapboxStyles.STANDARD,
       cameraOptions: mapbox.CameraOptions(
@@ -150,7 +177,7 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
         pitch: widget.options.initialPitch,
         bearing: widget.options.initialBearing,
       ),
-      viewport: viewport,
+      viewport: _viewport,
       // 让地图在嵌套滚动容器（如 Profile 的 SingleChildScrollView）中优先接管拖拽手势
       gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
         Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),

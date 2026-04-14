@@ -52,7 +52,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   double _mapRotation = 0.0; // 地图旋转角度（弧度）
   double _currentZoom = 17.0; // 当前缩放级别，默认为 17.0（两条街尺度，3D 建筑清晰）
   bool _isViewportReady = false; // 是否已拿到有效地图视口尺寸
-  bool _compassFollowMode = false; // 罗盘跟随模式：地图根据手机朝向旋转
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -550,11 +549,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       if (_autoExpandDisabled) {
         _autoExpandDisabled = false;
       }
-      // 用户手动拖动地图时退出罗盘跟随模式
-      if (_compassFollowMode) {
-        setState(() => _compassFollowMode = false);
-        _jogyMapController?.enableLocationPuck(showHeading: false);
-      }
     }
 
     // 更新地图旋转角度
@@ -736,8 +730,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               initialCenter: mapCenter,
               initialZoom: 17.0,
               initialPitch: 45.0,
-              rotationEnabled: _compassFollowMode,
-              compassFollowEnabled: _compassFollowMode,
               onMapCreated: (controller) {
                 setState(() {
                   _jogyMapController = controller;
@@ -866,35 +858,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            // 定位按钮：单击回到当前位置，双击切换罗盘跟随模式
+            // 定位按钮：回到当前位置 + 恢复朝向跟随
             Positioned(
               right: 16,
               bottom: 150,
               child: LocationButton(
-                isCompassMode: _compassFollowMode,
                 onTap: () {
-                  if (_compassFollowMode) {
-                    // 已在罗盘模式 → 退出，回到普通模式
-                    setState(() => _compassFollowMode = false);
-                    _jogyMapController?.enableLocationPuck(showHeading: false);
-                    if (_userLocation != null) {
-                      _jogyMapController?.moveTo(
-                        _userLocation!,
-                        zoom: 17,
-                        bearing: 0, // 回正北方
-                      );
-                    }
-                  } else if (_userLocation != null) {
-                    // 普通模式 → 回到当前位置
-                    _jogyMapController?.moveTo(_userLocation!, zoom: 17);
-                  }
-                },
-                onDoubleTap: () {
-                  if (!_compassFollowMode) {
-                    // 双击进入罗盘跟随模式
-                    setState(() => _compassFollowMode = true);
-                    _jogyMapController?.enableLocationPuck(showHeading: true);
-                  }
+                  // 重新进入 FollowPuck 模式（跟随位置 + 朝向旋转）
+                  _jogyMapController?.followUserWithHeading(zoom: 17);
                 },
               ),
             ),

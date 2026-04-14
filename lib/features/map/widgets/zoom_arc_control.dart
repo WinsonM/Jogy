@@ -2,31 +2,21 @@ import 'package:flutter/material.dart';
 
 class LocationButton extends StatelessWidget {
   final VoidCallback onTap;
-  final VoidCallback? onDoubleTap;
-  final bool isCompassMode;
 
-  const LocationButton({
-    super.key,
-    required this.onTap,
-    this.onDoubleTap,
-    this.isCompassMode = false,
-  });
+  const LocationButton({super.key, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      onDoubleTap: onDoubleTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
         child: Container(
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: isCompassMode
-                ? const Color(0xFF3FAAF0)
-                : Colors.white.withAlpha(240),
+            color: Colors.white.withAlpha(240),
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
@@ -37,8 +27,8 @@ class LocationButton extends StatelessWidget {
             ],
           ),
           child: Icon(
-            isCompassMode ? Icons.explore : Icons.my_location,
-            color: isCompassMode ? Colors.white : Colors.grey[700],
+            Icons.my_location,
+            color: Colors.grey[700],
             size: 24,
           ),
         ),
