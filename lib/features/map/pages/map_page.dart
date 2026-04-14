@@ -25,6 +25,7 @@ import '../../../data/models/post_model.dart';
 import '../../../data/datasources/mock_data_source.dart';
 import 'search_page.dart';
 import '../../scan/pages/scan_page.dart';
+import '../../../data/datasources/remote_data_source.dart';
 import '../../profile/services/browsing_history_service.dart';
 import 'location_picker_page.dart';
 import '../../../data/models/location_model.dart';
@@ -49,8 +50,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   int? _suppressedAutoIndex; // Prevent immediate auto re-expand after collapse
   bool _autoExpandDisabled = false; // Disable auto-expand until user drags
   double _mapRotation = 0.0; // 地图旋转角度（弧度）
-  double _currentZoom = 15.0; // 当前缩放级别，默认为 15.0
+  double _currentZoom = 17.0; // 当前缩放级别，默认为 17.0（两条街尺度，3D 建筑清晰）
   bool _isViewportReady = false; // 是否已拿到有效地图视口尺寸
+  bool _compassFollowMode = false; // 罗盘跟随模式：地图根据手机朝向旋转
 
   // Cache scale factors for each marker
   final Map<int, double> _scaleFactors = {};
@@ -548,6 +550,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       if (_autoExpandDisabled) {
         _autoExpandDisabled = false;
       }
+      // 用户手动拖动地图时退出罗盘跟随模式
+      if (_compassFollowMode) {
+        setState(() => _compassFollowMode = false);
+        _jogyMapController?.enableLocationPuck(showHeading: false);
+      }
     }
 
     // 更新地图旋转角度
@@ -727,9 +734,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               styleUri: MapConfig.mapboxStyleUri,
             ).build(JogyMapOptions(
               initialCenter: mapCenter,
-              initialZoom: 15.0,
+              initialZoom: 17.0,
               initialPitch: 45.0,
-              rotationEnabled: false,
+              rotationEnabled: _compassFollowMode,
+              compassFollowEnabled: _compassFollowMode,
               onMapCreated: (controller) {
                 setState(() {
                   _jogyMapController = controller;
@@ -858,14 +866,34 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            // 定位按钮
+            // 定位按钮：单击回到当前位置，双击切换罗盘跟随模式
             Positioned(
               right: 16,
               bottom: 150,
               child: LocationButton(
+                isCompassMode: _compassFollowMode,
                 onTap: () {
-                  if (_userLocation != null) {
-                    _jogyMapController?.moveTo(_userLocation!, zoom: 15);
+                  if (_compassFollowMode) {
+                    // 已在罗盘模式 → 退出，回到普通模式
+                    setState(() => _compassFollowMode = false);
+                    _jogyMapController?.enableLocationPuck(showHeading: false);
+                    if (_userLocation != null) {
+                      _jogyMapController?.moveTo(
+                        _userLocation!,
+                        zoom: 17,
+                        bearing: 0, // 回正北方
+                      );
+                    }
+                  } else if (_userLocation != null) {
+                    // 普通模式 → 回到当前位置
+                    _jogyMapController?.moveTo(_userLocation!, zoom: 17);
+                  }
+                },
+                onDoubleTap: () {
+                  if (!_compassFollowMode) {
+                    // 双击进入罗盘跟随模式
+                    setState(() => _compassFollowMode = true);
+                    _jogyMapController?.enableLocationPuck(showHeading: true);
                   }
                 },
               ),
@@ -879,86 +907,113 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   void _showQRCodeDialog(BuildContext context) {
     final GlobalKey qrKey = GlobalKey();
 
+    // 先显示 loading，异步获取真实用户数据
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                RepaintBoundary(
-                  key: qrKey,
-                  child: Container(
-                    color: Colors.white,
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircleAvatar(
-                          radius: 40,
-                          backgroundImage: NetworkImage(
-                            'https://i.pravatar.cc/150?img=11',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'WinsonM',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Scan to view profile',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        QrImageView(
-                          data: 'jogy://user/profile/1',
-                          version: QrVersions.auto,
-                          size: 200.0,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        return FutureBuilder(
+          future: RemoteDataSource().getCurrentUser(),
+          builder: (context, snapshot) {
+            // 获取到用户数据或失败后都显示 dialog
+            final username = snapshot.data?.username ?? 'Jogy User';
+            final avatarUrl = snapshot.data?.avatarUrl ?? '';
+            final userId = snapshot.data?.id ?? '';
+            final qrData = userId.isNotEmpty
+                ? 'jogy://user/profile/$userId'
+                : 'jogy://user/profile/unknown';
+            final isLoading =
+                snapshot.connectionState == ConnectionState.waiting;
+
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('关闭'),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => _saveQRCodeToGallery(qrKey),
-                      icon: const Icon(Icons.download, size: 18),
-                      label: const Text('保存图片'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF3FAAF0),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                    if (isLoading)
+                      const Padding(
+                        padding: EdgeInsets.all(40.0),
+                        child: CircularProgressIndicator(),
+                      )
+                    else ...[
+                      RepaintBoundary(
+                        key: qrKey,
+                        child: Container(
+                          color: Colors.white,
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                radius: 40,
+                                backgroundImage: avatarUrl.isNotEmpty
+                                    ? NetworkImage(avatarUrl)
+                                    : null,
+                                child: avatarUrl.isEmpty
+                                    ? const Icon(Icons.person, size: 40)
+                                    : null,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                username,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '扫码查看主页',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              QrImageView(
+                                data: qrData,
+                                version: QrVersions.auto,
+                                size: 200.0,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('关闭'),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => _saveQRCodeToGallery(qrKey),
+                            icon: const Icon(Icons.download, size: 18),
+                            label: const Text('保存图片'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3FAAF0),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

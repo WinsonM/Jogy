@@ -131,6 +131,15 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
   Widget build(BuildContext context) {
     final center = widget.options.initialCenter;
 
+    // 罗盘跟随模式：使用 FollowPuckViewportState 让地图跟随设备朝向
+    final mapbox.ViewportState? viewport = widget.options.compassFollowEnabled
+        ? mapbox.FollowPuckViewportState(
+            zoom: widget.options.initialZoom,
+            bearing: const mapbox.FollowPuckViewportStateBearingHeading(),
+            pitch: widget.options.initialPitch,
+          )
+        : null;
+
     return mapbox.MapWidget(
       styleUri: widget.styleUri ?? mapbox.MapboxStyles.STANDARD,
       cameraOptions: mapbox.CameraOptions(
@@ -141,6 +150,7 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
         pitch: widget.options.initialPitch,
         bearing: widget.options.initialBearing,
       ),
+      viewport: viewport,
       // 让地图在嵌套滚动容器（如 Profile 的 SingleChildScrollView）中优先接管拖拽手势
       gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
         Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),

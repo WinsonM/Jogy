@@ -43,7 +43,8 @@ abstract class JogyMapController {
   Future<MapBounds?> getVisibleBounds();
 
   /// 启用原生定位 puck（蓝色圆点）
-  Future<void> enableLocationPuck();
+  /// [showHeading] 为 true 时显示设备朝向箭头
+  Future<void> enableLocationPuck({bool showHeading = false});
 
   /// 释放资源
   void dispose();

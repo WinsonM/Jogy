@@ -176,13 +176,15 @@ class MapboxMapController implements JogyMapController {
   }
 
   @override
-  Future<void> enableLocationPuck() async {
+  Future<void> enableLocationPuck({bool showHeading = false}) async {
     try {
       await _mapboxMap.location.updateSettings(
         mapbox.LocationComponentSettings(
           enabled: true,
           pulsingEnabled: true,
           showAccuracyRing: false,
+          puckBearingEnabled: showHeading,
+          puckBearing: showHeading ? mapbox.PuckBearing.HEADING : null,
           locationPuck: mapbox.LocationPuck(
             locationPuck2D: mapbox.DefaultLocationPuck2D(),
           ),
