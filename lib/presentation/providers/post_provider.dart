@@ -86,6 +86,12 @@ class PostProvider extends ChangeNotifier {
     }
   }
 
+  /// Insert a newly created post at the top of the list and notify listeners.
+  void addNewPost(PostModel post) {
+    _posts.insert(0, post);
+    notifyListeners();
+  }
+
   Future<PostModel?> getPostById(String id) async {
     try {
       return await _repository.getPostById(id);

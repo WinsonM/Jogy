@@ -85,7 +85,6 @@ class DatabaseHelper {
         content TEXT,
         image_paths TEXT, -- JSON encoded list of strings
         type TEXT,
-        type TEXT,
         timestamp INTEGER,
         location_lat REAL,
         location_lng REAL,

@@ -51,19 +51,8 @@ class _MessagePageState extends State<MessagePage>
   @override
   void initState() {
     super.initState();
-    // Initialize mock data
-    _messages = List.generate(10, (index) {
-      return MessageItem(
-        id: index,
-        userName: 'User Name $index',
-        avatarUrl: 'https://i.pravatar.cc/150?img=$index',
-        unreadCount: (index * 7 + 3) % 50,
-      );
-    });
-    // Initialize controllers for each item (stable by id)
-    for (final item in _messages) {
-      _controllersById[item.id] = SlidableController(this);
-    }
+    // TODO: 从 API 加载消息列表
+    _messages = [];
     _reportUnreadCount();
   }
 
@@ -146,6 +135,21 @@ class _MessagePageState extends State<MessagePage>
         child: Stack(
           children: [
             // Full screen message list with gradient mask
+            if (_filteredMessages.isEmpty)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.chat_bubble_outline,
+                        size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text('暂无消息',
+                        style:
+                            TextStyle(color: Colors.grey[500], fontSize: 16)),
+                  ],
+                ),
+              )
+            else
             ShaderMask(
               shaderCallback: (Rect bounds) {
                 return LinearGradient(

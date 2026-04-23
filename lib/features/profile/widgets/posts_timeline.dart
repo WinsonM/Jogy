@@ -33,17 +33,15 @@ class PostsTimeline extends StatelessWidget {
     );
   }
 
-  /// 构建空状态
+  /// 构建空状态（与 PostsGridView 对齐：居中、无图标、14sp 灰色）
   Widget _buildEmptyState() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 60),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.article_outlined, size: 64, color: Colors.grey[300]),
-          const SizedBox(height: 16),
-          Text('暂无发布', style: TextStyle(fontSize: 16, color: Colors.grey[400])),
-        ],
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Text(
+          '暂无发布',
+          style: TextStyle(color: Colors.grey, fontSize: 14),
+        ),
       ),
     );
   }

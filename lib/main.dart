@@ -1,23 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'features/home/home_wrapper.dart';
-import 'data/repositories/post_repository_impl.dart';
-import 'data/datasources/remote_data_source.dart';
-import 'presentation/providers/post_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+import 'core/services/auth_service.dart';
+import 'data/datasources/remote_data_source.dart';
+import 'data/repositories/post_repository_impl.dart';
+import 'features/auth/pages/login_page.dart';
+import 'features/home/home_wrapper.dart';
+import 'presentation/providers/post_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
 
+  // Shared HTTP data source
   final remoteDataSource = RemoteDataSource();
 
+  // Auth service — restores saved session
+  final authService = AuthService(remoteDataSource: remoteDataSource);
+  await authService.init();
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => PostProvider(
-        PostRepositoryImpl(remoteDataSource: remoteDataSource),
-      ),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: authService),
+        ChangeNotifierProvider(
+          create: (_) => PostProvider(
+            PostRepositoryImpl(remoteDataSource: remoteDataSource),
+          ),
+        ),
+      ],
       child: const MyApp(),
     ),
   );
@@ -41,7 +54,11 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: const Color(0xFFF5F5F7),
       ),
-      home: const HomeWrapper(),
+      home: Consumer<AuthService>(
+        builder: (context, auth, _) {
+          return auth.isLoggedIn ? const HomeWrapper() : const LoginPage();
+        },
+      ),
     );
   }
 }

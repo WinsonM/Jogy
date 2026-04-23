@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import '../map_types.dart';
@@ -17,7 +18,22 @@ class MapboxMapController implements JogyMapController {
   /// 由 wrapper 注入的回调，用于重新激活 FollowPuck viewport
   void Function({double? zoom, double? pitch})? onRequestFollowHeading;
 
+  /// Camera idle 事件广播
+  /// 由 wrapper 在 `onMapIdleListener` 触发时调用 [emitCameraIdle]
+  final StreamController<MapCameraEvent> _cameraIdleController =
+      StreamController<MapCameraEvent>.broadcast();
+
   MapboxMapController(this._mapboxMap, this._lastCameraState);
+
+  /// 由 wrapper 在 Mapbox `onMapIdleListener` 触发后调用
+  void emitCameraIdle(MapCameraEvent event) {
+    if (!_cameraIdleController.isClosed) {
+      _cameraIdleController.add(event);
+    }
+  }
+
+  @override
+  Stream<MapCameraEvent> get onCameraIdle => _cameraIdleController.stream;
 
   /// 获取原生 MapboxMap 实例（仅在需要 Mapbox 特有功能时使用）
   mapbox.MapboxMap get nativeMap => _mapboxMap;
@@ -185,6 +201,18 @@ class MapboxMapController implements JogyMapController {
   }
 
   @override
+  double pixelDistanceToDegrees(
+    double pixels,
+    MapLatLng atLatitude,
+    double zoom,
+  ) {
+    // Mapbox 用 512 像素作为 zoom 0 的世界宽度
+    final scale = 512.0 * math.pow(2, zoom);
+    final degreesPerPixelLng = 360.0 / scale;
+    return pixels * degreesPerPixelLng;
+  }
+
+  @override
   Future<void> enableLocationPuck() async {
     try {
       await _mapboxMap.location.updateSettings(
@@ -207,6 +235,7 @@ class MapboxMapController implements JogyMapController {
   @override
   void dispose() {
     // MapboxMap 的生命周期由 MapWidget 管理
+    _cameraIdleController.close();
   }
 
   /// Web Mercator 投影：经纬度 → 像素坐标

@@ -1,2 +1,122 @@
-
+# ===== 敏感信息 =====
 .env
+.env.local
+.env.*.local
+ios/Flutter/Secret.xcconfig
+android/key.properties
+android/app/key.jks
+android/app/upload-keystore.jks
+*.pem
+*.p12
+*.mobileprovision
+
+# ===== Flutter / Dart 构建产物与缓存 =====
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+/build/
+**/build/
+.fvm/
+.flutter-versions
+doc/api/
+
+# ===== macOS 系统垃圾 =====
+**/.DS_Store
+.DS_Store
+
+# ===== IDE / 编辑器 =====
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ===== Android =====
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+*.apk
+*.aab
+
+# ===== iOS =====
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+*.ipa
+*.dSYM.zip
+*.dSYM/
+
+# ===== macOS App =====
+**/macos/**/Pods/
+**/macos/**/xcuserdata/
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# ===== Linux =====
+**/linux/flutter/ephemeral/
+**/linux/flutter/generated_plugin_registrant.*
+**/linux/flutter/generated_plugins.cmake
+
+# ===== Windows =====
+**/windows/flutter/ephemeral/
+**/windows/flutter/generated_plugin_registrant.*
+**/windows/flutter/generated_plugins.cmake
+
+# ===== Web =====
+web_build/
+web_build.zip
+
+# ===== 日志 =====
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===== 临时 / 测试 =====
+test_coords.dart
+test_blur.dart
+test_mapbox.dart
+coverage/
+
+# ===== Python (后端同目录情况) =====
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/

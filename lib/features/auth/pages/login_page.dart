@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:provider/provider.dart';
+
+import '../../../core/services/auth_service.dart';
 import '../widgets/grid_bubble_background.dart';
 import '../../home/home_wrapper.dart';
 
@@ -69,6 +72,12 @@ class _LoginPageState extends State<LoginPage>
 
   // 邮箱错误信息（用于显示后端返回的"邮箱已被使用"等错误）
   String? _emailError;
+
+  // 邮箱验证缓存：验证码是一次性消耗的 → 首次 verifyCode 成功后，后端写入
+  // 10 分钟的 "email_verified" 标记，这里记住已验证状态，避免重试注册时
+  // 重新调用 verifyCode（会失败：验证码已失效）。
+  bool _emailVerified = false;
+  String _verifiedEmail = '';
 
   // Focus nodes
   final FocusNode _loginEmailFocus = FocusNode();
@@ -145,6 +154,8 @@ class _LoginPageState extends State<LoginPage>
     setState(() {
       _authMode = AuthMode.register;
       _emailError = null;
+      _emailVerified = false;
+      _verifiedEmail = '';
     });
   }
 
@@ -152,6 +163,8 @@ class _LoginPageState extends State<LoginPage>
     setState(() {
       _authMode = AuthMode.login;
       _emailError = null;
+      _emailVerified = false;
+      _verifiedEmail = '';
     });
   }
 
@@ -160,22 +173,49 @@ class _LoginPageState extends State<LoginPage>
 
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final auth = context.read<AuthService>();
+      await auth.login(
+        _loginEmailController.text.trim(),
+        _loginPasswordController.text,
+      );
 
-    if (!mounted) return;
-    setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
 
-    // TODO: 实际登录逻辑
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('登录成功！')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('登录成功！')),
+      );
 
-    // 登录成功后导航到主页（并清空登录相关页面栈）
-    if (mounted) {
+      // AuthService.isLoggedIn is now true → Consumer in main.dart
+      // will automatically rebuild to show HomeWrapper.
+      // But we also explicitly navigate to clear the stack.
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeWrapper()),
         (route) => false,
       );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg.contains('Unauthorized') || msg.contains('Invalid')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('用户名/邮箱或密码错误')),
+        );
+      } else if (msg.contains('Forbidden')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('账号已被禁用')),
+        );
+      } else if (msg.contains('Connection')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法连接服务器，请检查网络')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('登录失败：$msg')),
+        );
+      }
     }
   }
 
@@ -200,9 +240,8 @@ class _LoginPageState extends State<LoginPage>
     });
 
     try {
-      // TODO: 替换为实际的 RemoteDataSource 调用
-      // await _remoteDataSource.sendCode(email);
-      await Future.delayed(const Duration(seconds: 1));
+      final auth = context.read<AuthService>();
+      await auth.sendCode(email);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -215,9 +254,20 @@ class _LoginPageState extends State<LoginPage>
       if (errorMsg.contains('EMAIL_TAKEN') || errorMsg.contains('already exists')) {
         setState(() => _emailError = '该邮箱已被注册');
         _registerFormKey.currentState?.validate();
-      } else {
+      } else if (errorMsg.contains('429') || errorMsg.contains('等待')) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('发送失败：$errorMsg')),
+          const SnackBar(content: Text('发送过于频繁，请稍后再试')),
+        );
+        // Start cooldown anyway so UI reflects server state
+        _startCountdown();
+      } else {
+        // Strip "[CODE] " prefix from the structured error so the generic fallback
+        // shows only the human-readable message.
+        final cleanMsg = errorMsg
+            .replaceFirst('Exception: ', '')
+            .replaceAll(RegExp(r'^\[.*?\]\s*'), '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送失败：$cleanMsg')),
         );
       }
     } finally {
@@ -246,9 +296,13 @@ class _LoginPageState extends State<LoginPage>
   void _handleRegister() async {
     if (!_registerFormKey.currentState!.validate()) return;
 
-    // 验证码不能为空
+    final email = _registerEmailController.text.trim();
     final code = _registerVerificationCodeController.text.trim();
-    if (code.isEmpty) {
+
+    // 只在尚未验证当前邮箱时才调用 verifyCode（它消耗一次性验证码）。
+    // 已验证的邮箱在后端有 10 分钟的 email_verified 标记，注册时会自动通过。
+    final needsVerify = !_emailVerified || _verifiedEmail != email;
+    if (needsVerify && code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请输入验证码')),
       );
@@ -258,19 +312,21 @@ class _LoginPageState extends State<LoginPage>
     setState(() => _isLoading = true);
 
     try {
-      // TODO: 替换为实际的 RemoteDataSource 调用
-      // 1. 先注册
-      // await _remoteDataSource.register(
-      //   _registerNicknameController.text.trim(),
-      //   _registerPasswordController.text,
-      //   email: _registerEmailController.text.trim(),
-      // );
-      // 2. 再验证邮箱
-      // await _remoteDataSource.verifyCode(
-      //   _registerEmailController.text.trim(),
-      //   code,
-      // );
-      await Future.delayed(const Duration(seconds: 1));
+      final auth = context.read<AuthService>();
+
+      // 1. Verify email code (only on first attempt for this email)
+      if (needsVerify) {
+        await auth.verifyCode(email, code);
+        _emailVerified = true;
+        _verifiedEmail = email;
+      }
+
+      // 2. Register the account (backend returns tokens → AuthService auto-logs in)
+      await auth.register(
+        _registerNicknameController.text.trim(),
+        _registerPasswordController.text,
+        email: email,
+      );
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -279,8 +335,13 @@ class _LoginPageState extends State<LoginPage>
         const SnackBar(content: Text('注册成功！')),
       );
 
-      // 注册成功后返回登录
-      setState(() => _authMode = AuthMode.login);
+      // AuthService.isLoggedIn 已为 true 并 notifyListeners()，
+      // 顶层 Consumer 会自动切换到 HomeWrapper；这里显式 push 一次
+      // 以清除导航栈，防止用户通过返回键回到登录页。
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeWrapper()),
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -293,9 +354,36 @@ class _LoginPageState extends State<LoginPage>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('该用户名已被使用')),
         );
-      } else {
+      } else if (errorMsg.contains('EMAIL_NOT_VERIFIED')) {
+        // 验证标记过期（>10 分钟）或后端未查到：强制重新发码
+        setState(() {
+          _emailVerified = false;
+          _verifiedEmail = '';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('注册失败：$errorMsg')),
+          const SnackBar(content: Text('邮箱验证已过期，请重新获取验证码')),
+        );
+      } else if (errorMsg.contains('Invalid or expired code')) {
+        // 验证码错误：保持未验证状态，用户可重新输入验证码
+        setState(() {
+          _emailVerified = false;
+          _verifiedEmail = '';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('验证码无效或已过期')),
+        );
+      } else if (errorMsg.contains('Validation error')) {
+        // Password strength mismatch (backend requires 8+ chars, upper+lower+digit)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('密码需至少8位，包含大小写字母和数字')),
+        );
+      } else {
+        // Strip "[CODE] " prefix so the generic fallback shows only the human text.
+        final cleanMsg = errorMsg
+            .replaceFirst('Exception: ', '')
+            .replaceAll(RegExp(r'^\[.*?\]\s*'), '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('注册失败：$cleanMsg')),
         );
       }
     }
@@ -487,10 +575,10 @@ class _LoginPageState extends State<LoginPage>
           _buildTextField(
             controller: _loginEmailController,
             focusNode: _loginEmailFocus,
-            hintText: '邮箱或手机号',
+            hintText: '用户名或邮箱',
             prefixIcon: Icons.person_outline,
             keyboardType: TextInputType.emailAddress,
-            validator: (value) => value?.isEmpty ?? true ? '请输入邮箱或手机号' : null,
+            validator: (value) => value?.isEmpty ?? true ? '请输入用户名或邮箱' : null,
           ),
           const SizedBox(height: 16),
 
@@ -510,8 +598,7 @@ class _LoginPageState extends State<LoginPage>
             ),
             validator: (value) {
               if (value?.isEmpty ?? true) return '请输入密码';
-              if (value!.length < 6) return '密码至少6位';
-              return null;
+              return null; // Login: let backend decide
             },
           ),
           const SizedBox(height: 24),
@@ -641,7 +728,10 @@ class _LoginPageState extends State<LoginPage>
             ),
             validator: (value) {
               if (value?.isEmpty ?? true) return '请输入密码';
-              if (value!.length < 6) return '密码至少6位';
+              if (value!.length < 8) return '密码至少8位';
+              if (!RegExp(r'[A-Z]').hasMatch(value)) return '需包含大写字母';
+              if (!RegExp(r'[a-z]').hasMatch(value)) return '需包含小写字母';
+              if (!RegExp(r'[0-9]').hasMatch(value)) return '需包含数字';
               return null;
             },
           ),

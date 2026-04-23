@@ -1,20 +1,29 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/constants/api_constants.dart';
 import '../models/post_model.dart';
 import '../models/user_model.dart';
 
-/// Remote data source for API calls to the Jogy backend
+/// Remote data source for API calls to the Jogy backend.
+///
+/// Uses a shared [Dio] instance so that [setAuthToken] applies to ALL
+/// `RemoteDataSource()` instances (e.g. those created inside profile pages).
 class RemoteDataSource {
-  final Dio _dio;
-
-  RemoteDataSource({Dio? dio}) : _dio = dio ?? Dio() {
-    _dio.options.connectTimeout = const Duration(seconds: 10);
-    _dio.options.receiveTimeout = const Duration(seconds: 10);
-    _dio.options.headers = {
+  /// Shared Dio instance — created once, reused everywhere.
+  static final Dio _sharedDio = Dio()
+    ..options.connectTimeout = const Duration(seconds: 10)
+    ..options.receiveTimeout = const Duration(seconds: 10)
+    ..options.headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
-  }
+
+  final Dio _dio;
+
+  /// Create a RemoteDataSource.
+  /// Pass a custom [dio] only for testing; production code should omit it
+  /// so the shared instance (with auth headers) is used.
+  RemoteDataSource({Dio? dio}) : _dio = dio ?? _sharedDio;
 
   /// Set the authorization token for authenticated requests
   void setAuthToken(String token) {
@@ -274,8 +283,9 @@ class RemoteDataSource {
     List<String>? mediaUrls,
     String? expireAt,
   }) async {
+    Response response;
     try {
-      final response = await _dio.post(
+      response = await _dio.post(
         ApiConstants.posts,
         data: {
           'content_text': contentText,
@@ -287,9 +297,17 @@ class RemoteDataSource {
           if (expireAt != null) 'expire_at': expireAt,
         },
       );
-      return PostModel.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to create post');
+    }
+    // 网络成功，解析失败单独处理，raw response 进日志便于排查
+    try {
+      return PostModel.fromJson(response.data as Map<String, dynamic>);
+    } catch (e, st) {
+      debugPrint('[createPost] Failed to parse response: $e');
+      debugPrint('[createPost] Raw response: ${response.data}');
+      debugPrint('[createPost] Stack: $st');
+      throw Exception('Failed to parse server response: $e');
     }
   }
 
@@ -738,7 +756,18 @@ class RemoteDataSource {
 
       String errorMessage = defaultMessage;
       if (data is Map<String, dynamic> && data.containsKey('detail')) {
-        errorMessage = data['detail'].toString();
+        final detail = data['detail'];
+        // Backend convention: structured errors return detail = {code, message}.
+        // Include both code and message so UI can match on code (e.g. "EMAIL_TAKEN")
+        // while still showing the Chinese message to users.
+        // Format: "[EMAIL_TAKEN] 此邮箱已注册，请直接登录"
+        if (detail is Map) {
+          final code = detail['code'] as String? ?? '';
+          final message = detail['message'] as String? ?? detail.toString();
+          errorMessage = code.isNotEmpty ? '[$code] $message' : message;
+        } else {
+          errorMessage = detail.toString();
+        }
       }
 
       switch (statusCode) {

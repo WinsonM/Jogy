@@ -18,11 +18,13 @@ import '../../../core/map/map_widget_builder.dart';
 import '../../../core/map/mapbox/mapbox_map_widget_builder.dart';
 import '../widgets/map_bubble.dart';
 import '../widgets/zoom_arc_control.dart';
+import '../clustering/cluster_engine.dart';
+import '../clustering/cluster_models.dart';
 import '../../detail/pages/detail_page.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../../config/map_config.dart';
 import '../../../data/models/post_model.dart';
-import '../../../data/datasources/mock_data_source.dart';
+import 'package:dio/dio.dart';
 import 'search_page.dart';
 import '../../scan/pages/scan_page.dart';
 import '../../../data/datasources/remote_data_source.dart';
@@ -57,13 +59,27 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   final Map<int, double> _scaleFactors = {};
 
   // 精确的真实屏幕坐标缓存（使用原生 Mapbox SDK 异步映射）
+  // 键：`p_<postId>` 单点 / `c_<clusterId>` 聚合（= ClusterOrPoint.id）
   final Map<String, MapScreenPoint> _postScreenPoints = {};
   bool _isUpdatingPositions = false;
   bool _needsPositionUpdate = false; // 当更新被跳过时标记需要重试
 
+  // —— 聚合相关 ——
+  /// 聚合引擎（纯 Dart，地图库无关）
+  final SuperclusterEngine _clusterEngine = SuperclusterEngine();
+
+  /// 当前视口的聚合查询结果（cluster 与单点混合）
+  ///
+  /// 初始为空列表 → 用 `posts` 单点渲染作为回退；
+  /// 首次 `_recomputeClusters` 后替换为真实结果。
+  List<ClusterOrPoint> _clusterResults = const [];
+
   // 用户位置相关
   MapLatLng? _userLocation;
   bool _locationLoading = true;
+
+  // 记录上次已经 SnackBar 过的错误信息，避免同一错误反复 toast
+  String? _lastShownError;
 
   // 记录上一次 posts 的签名，用于检测 posts 刷新后重新计算屏幕坐标
   String _lastPostsSignature = '';
@@ -113,11 +129,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 5),
         ),
       );
-
-      // 设置 MockDataSource 的中心点为用户位置
-      MockDataSource.setCenter(position.latitude, position.longitude);
 
       setState(() {
         _userLocation = MapLatLng(position.latitude, position.longitude);
@@ -137,20 +151,41 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
   }
 
-  /// GPS 不可用时，使用 MockDataSource 的中心点作为用户位置
+  /// GPS 不可用时，使用默认位置
   void _useFallbackLocation() {
-    final fallback = MockDataSource.getCenter();
+    const defaultLat = 39.9042;
+    const defaultLng = 116.4074;
     setState(() {
-      _userLocation = MapLatLng(fallback.latitude, fallback.longitude);
+      _userLocation = MapLatLng(defaultLat, defaultLng);
       _locationLoading = false;
     });
-    // 使用 fallback 位置加载 posts
     if (mounted) {
       Provider.of<PostProvider>(context, listen: false).fetchPostsByLocation(
-        latitude: fallback.latitude,
-        longitude: fallback.longitude,
+        latitude: defaultLat,
+        longitude: defaultLng,
       );
     }
+  }
+
+  /// 在 Consumer 监听到新的 error 时 toast 一次；error 清除后重置以便下次再提示。
+  /// 在 build 的过程中不能直接 showSnackBar（那会触发 setState），
+  /// 所以用 addPostFrameCallback 延迟到帧结束。
+  void _maybeShowErrorSnackBar(String? error) {
+    if (error == null) {
+      _lastShownError = null;
+      return;
+    }
+    if (error == _lastShownError) return;
+    _lastShownError = error;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('加载附近内容失败: $error'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    });
   }
 
   /// 弹出定位权限提示对话框
@@ -296,6 +331,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   // 异步获取 Mapbox 引擎底层原生坐标（完美贴合 3D Pitch 和偏航）
+  //
+  // 计算对象：聚合结果（cluster + 单点）。聚合未就绪时回退到 posts 列表。
+  // 位置缓存键：`ClusterOrPoint.id`（`p_<postId>` 或 `c_<clusterId>`）
   Future<void> _updatePostPositionsAsync() async {
     if (_jogyMapController == null) return;
 
@@ -305,26 +343,33 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       return;
     }
 
-    final posts = Provider.of<PostProvider>(context, listen: false).posts;
-    if (posts.isEmpty) return;
+    // 优先使用 cluster 结果；未就绪时用 posts 单点作为回退
+    final items = _currentRenderItems();
+    if (items.isEmpty) return;
 
     _isUpdatingPositions = true;
     _needsPositionUpdate = false;
     try {
-      final futures = posts.map((post) async {
+      final futures = items.map((item) async {
         final pt = await _jogyMapController!.latLngToScreenPointAsync(
-          MapLatLng(post.location.latitude, post.location.longitude),
+          item.center,
         );
-        return MapEntry(post.id, pt);
+        return MapEntry(item.id, pt);
       });
       final entries = await Future.wait(futures);
 
       if (mounted) {
         bool needsUpdate = false;
+        // 清理不再存在的 key（避免 stale cluster 残留）
+        final activeIds = items.map((e) => e.id).toSet();
+        _postScreenPoints.removeWhere((k, _) => !activeIds.contains(k));
+
         for (var entry in entries) {
           if (entry.value != null) {
             final old = _postScreenPoints[entry.key];
-            if (old == null || old.x != entry.value!.x || old.y != entry.value!.y) {
+            if (old == null ||
+                old.x != entry.value!.x ||
+                old.y != entry.value!.y) {
               _postScreenPoints[entry.key] = entry.value!;
               needsUpdate = true;
             }
@@ -343,6 +388,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         _updatePostPositionsAsync();
       }
     }
+  }
+
+  /// 当前应渲染的条目列表：优先 cluster 结果，未就绪时 posts 全量单点
+  List<ClusterOrPoint> _currentRenderItems() {
+    if (_clusterResults.isNotEmpty) return _clusterResults;
+    final posts = Provider.of<PostProvider>(context, listen: false).posts;
+    return posts.map<ClusterOrPoint>(SinglePoint.new).toList();
   }
 
   Future<void> _navigateToSearch() async {
@@ -572,6 +624,54 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
   }
 
+  // 地图相机停止移动（手势/动画结束）—— 重算聚合
+  void _onCameraIdle(MapCameraEvent event) {
+    _recomputeClusters();
+  }
+
+  /// 根据当前 bounds + zoom 重新分簇
+  ///
+  /// 调用时机：
+  /// - `onMapCreated` 后首次 viewport 就绪
+  /// - 每次 `onCameraIdle`
+  /// - PostProvider 的 posts 变化（data reload）后
+  Future<void> _recomputeClusters() async {
+    final controller = _jogyMapController;
+    if (controller == null) return;
+
+    final bounds = await controller.getVisibleBounds();
+    if (bounds == null || !mounted) return;
+
+    // 为避免视口边缘的点被遗漏，扩一圈 clusterRadiusPx 对应的经纬度
+    final padDeg = controller.pixelDistanceToDegrees(
+      _clusterEngine.config.clusterRadiusPx,
+      bounds.center,
+      controller.cameraState.zoom,
+    );
+    final paddedBounds = MapBounds(
+      southwest: MapLatLng(
+        bounds.minLatitude - padDeg,
+        bounds.minLongitude - padDeg,
+      ),
+      northeast: MapLatLng(
+        bounds.maxLatitude + padDeg,
+        bounds.maxLongitude + padDeg,
+      ),
+    );
+
+    final results = _clusterEngine.getClusters(
+      bounds: paddedBounds,
+      zoom: controller.cameraState.zoom,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _clusterResults = results;
+    });
+    // 聚合结果变化后重算屏幕坐标
+    _updatePostPositionsAsync();
+  }
+
   /// 根据当前地图视口刷新 posts
   Future<void> _refreshPostsForCurrentViewport() async {
     final controller = _jogyMapController;
@@ -599,14 +699,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     });
   }
 
-  // 构建单个气泡覆盖层
+  // 构建单点气泡覆盖层（兼容层：被新的 _buildItemOverlay 调用）
   Widget _buildBubbleOverlay(List<PostModel> posts, int index) {
     final post = posts[index];
     final isExpanded = _expandedIndex == index;
     final scaleFactor = _scaleFactors[index] ?? 1.0;
 
     // Use highly accurate asynchronously pre-fetched native Mapbox screen point
-    final screenPoint = _postScreenPoints[post.id];
+    final screenPoint = _postScreenPoints['p_${post.id}'];
     if (screenPoint == null) return const SizedBox.shrink();
 
     // Alignment: bottomCenter - 尖角在地理坐标位置
@@ -660,23 +760,61 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // 位置加载中显示加载指示器
-    if (_locationLoading) {
-      return const Center(child: CircularProgressIndicator());
+  /// 构建聚合/单点覆盖层（cluster-aware）
+  Widget _buildItemOverlay(ClusterOrPoint item, List<PostModel> posts) {
+    if (item is SinglePoint) {
+      // 找到 item.post 在 posts 列表中的 index，沿用原有的自动展开/scale 体系
+      final idx = posts.indexWhere((p) => p.id == item.post.id);
+      if (idx < 0) return const SizedBox.shrink();
+      return _buildBubbleOverlay(posts, idx);
     }
 
+    // ClusterNode 分支
+    final cluster = item as ClusterNode;
+    final screenPoint = _postScreenPoints[cluster.id];
+    if (screenPoint == null) return const SizedBox.shrink();
+
+    // Cluster 不展开，但 scale 仍随距离变化。用 cluster.id 作为 key 让手势期间
+    // 的 scale 过渡与单点一致——先简单统一用 1.0，后续若需要可扩展 _updateScaleFactors。
+    const size = MapBubbleWidget.expandedHeight;
+    return Positioned(
+      key: ValueKey(cluster.id),
+      left: screenPoint.x - size / 2,
+      top: screenPoint.y - size,
+      width: size,
+      height: size,
+      child: RepaintBoundary(
+        child: MapBubbleWidget(
+          isExpanded: false,
+          scaleFactor: 1.0,
+          cluster: cluster,
+          mapRotation: _mapRotation,
+          onTap: () => _onClusterTap(cluster),
+        ),
+      ),
+    );
+  }
+
+  /// 点击聚合：smart zoom 到可以展开此 cluster 的最小 zoom
+  void _onClusterTap(ClusterNode cluster) {
+    final controller = _jogyMapController;
+    if (controller == null) return;
+    final targetZoom = _clusterEngine
+        .getClusterExpansionZoom(cluster)
+        .clamp(0.0, 20.0);
+    controller.moveTo(
+      cluster.center,
+      zoom: targetZoom,
+      duration: const Duration(milliseconds: 600),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Consumer<PostProvider>(
       builder: (context, postProvider, child) {
-        // 首次加载时显示加载指示器，后续刷新时保持地图不销毁
-        if (postProvider.isLoading && postProvider.posts.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (postProvider.error != null && postProvider.posts.isEmpty) {
-          return Center(child: Text('Error: ${postProvider.error}'));
-        }
+        // 错误用 SnackBar 提示一次，不阻塞整个页面；地图与工具栏始终渲染
+        _maybeShowErrorSnackBar(postProvider.error);
 
         final posts = postProvider.posts;
 
@@ -690,27 +828,38 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         // posts 为空时：可能是首次加载尚未完成，显示地图（不显示 "No posts found"）
         // 地图会在 posts 到达后通过 Consumer rebuild 自动显示气泡
 
-        // Posts 刷新后（坐标变化），重新计算屏幕坐标
+        // Posts 刷新后（坐标变化），重建聚合索引 + 重新计算屏幕坐标
         final postsSignature = posts.isEmpty
             ? ''
             : '${posts.length}_${posts[0].location.latitude}_${posts[0].location.longitude}';
         if (_lastPostsSignature != postsSignature) {
           _lastPostsSignature = postsSignature;
+          // 先重建聚合索引（同步、O(n log n)，通常 <20ms）
+          _clusterEngine.load(posts);
           // 帧结束后触发，避免在 build 中调用 setState
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _jogyMapController != null) {
               _postScreenPoints.clear();
-              _updatePostPositionsAsync();
+              // 重算聚合（会间接触发 _updatePostPositionsAsync）
+              _recomputeClusters();
             }
           });
         }
 
-        // Sort markers: expanded bubble on top (rendered last)
-        final sortedIndices = List<int>.generate(posts.length, (i) => i);
-        if (_expandedIndex != null) {
-          sortedIndices.sort((a, b) {
-            if (a == _expandedIndex) return 1;
-            if (b == _expandedIndex) return -1;
+        // 聚合/单点混合渲染列表。展开态的单点排最后（渲染在最上）
+        final renderItems =
+            _clusterResults.isNotEmpty
+                ? List<ClusterOrPoint>.from(_clusterResults)
+                : posts.map<ClusterOrPoint>(SinglePoint.new).toList();
+        if (_expandedIndex != null && _expandedIndex! < posts.length) {
+          final expandedPostId = posts[_expandedIndex!].id;
+          renderItems.sort((a, b) {
+            final aIsExpanded =
+                a is SinglePoint && a.post.id == expandedPostId;
+            final bIsExpanded =
+                b is SinglePoint && b.post.id == expandedPostId;
+            if (aIsExpanded && !bIsExpanded) return 1;
+            if (!aIsExpanded && bIsExpanded) return -1;
             return 0;
           });
         }
@@ -737,18 +886,22 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                       controller.cameraState.viewportSize.x > 0 &&
                       controller.cameraState.viewportSize.y > 0;
                 });
-                // Initialize bubble positions
-                _updatePostPositionsAsync();
+                // 初次拉取到 posts 时已经 load，这里补一次以防 onMapCreated 晚于数据
+                if (posts.isNotEmpty) {
+                  _clusterEngine.load(posts);
+                }
+                // Initialize bubble positions + 首次聚合计算
+                _recomputeClusters();
               },
               onCameraMove: _onCameraMove,
+              onCameraIdle: _onCameraIdle,
               onTap: _onMapTap,
             )),
             // 标记覆盖层（仅在地图控制器就绪后渲染）
             // 用户位置由 Mapbox 原生 location puck 显示，无需 Flutter overlay
             if (_jogyMapController != null && _isViewportReady) ...[
-              // Posts 气泡标记
-              ...sortedIndices
-                  .map((index) => _buildBubbleOverlay(posts, index)),
+              // Posts / Cluster 气泡标记
+              ...renderItems.map((item) => _buildItemOverlay(item, posts)),
             ],
             // 顶部工具栏：搜索框 + 消息按钮 + 发布按钮
             Positioned(
@@ -869,6 +1022,19 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 },
               ),
             ),
+            // 小型 loading 徽标：定位中或首次 posts 加载中，右上角显示
+            // 放在最后以保证在工具栏之上
+            if (_locationLoading ||
+                (postProvider.isLoading && postProvider.posts.isEmpty))
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 20,
+                right: 24,
+                child: const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
           ],
         );
       },
@@ -1063,6 +1229,9 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
   bool _isLocationLoading = true;
   bool _hasManualLocation = false;
 
+  // Publish state
+  bool _isPublishing = false;
+
   Future<void> _pickPostImage() async {
     try {
       final List<XFile> images = await ImagePicker().pickMultiImage();
@@ -1102,19 +1271,35 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
         return;
       }
 
-      // 模拟逆地理编码 (因为 geocoding 包可能需要配置 key 或者原生集成)
-      // 使用简单的 Mock 逻辑，基于坐标生成"真实"的模拟地址
-      String address = '未知位置';
-      String placeName = '选择位置';
-
-      // 简单模拟: 根据经纬度的小数位生成不同的"街道"
-      final lastDigit = (currentPos.latitude * 10000).toInt() % 10;
-      if (lastDigit % 2 == 0) {
-        placeName = '未来科技城';
-        address = '文一西路 999 号';
-      } else {
-        placeName = '梦想小镇';
-        address = '良睦路 1399 号';
+      // 逆地理编码：Mapbox Geocoding v5
+      String placeName = '当前位置';
+      String address = '';
+      try {
+        final geo = await Dio().get(
+          'https://api.mapbox.com/geocoding/v5/mapbox.places/'
+          '${currentPos.longitude},${currentPos.latitude}.json',
+          queryParameters: {
+            'access_token': MapConfig.mapboxApiKey,
+            'language': 'zh',
+            'limit': 1,
+          },
+        );
+        final features = geo.data['features'] as List? ?? [];
+        if (features.isNotEmpty) {
+          final f = features.first;
+          placeName = f['text'] as String? ?? '当前位置';
+          final fullName = f['place_name'] as String? ?? '';
+          if (fullName.startsWith(placeName) &&
+              fullName.length > placeName.length) {
+            address = fullName
+                .substring(placeName.length)
+                .replaceFirst(RegExp(r'^,\s*'), '');
+          } else {
+            address = fullName;
+          }
+        }
+      } catch (_) {
+        // 逆地理编码失败时使用默认值
       }
 
       setState(() {
@@ -1156,44 +1341,159 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
     }
   }
 
-  Future<void> _loadDraft() async {
-    final draft = await DatabaseHelper().getDraft();
-    if (draft != null && mounted) {
-      setState(() {
-        if (draft['title'] != null) {
-          _titleController.text = draft['title'];
-        }
-        if (draft['content'] != null) {
-          _contentController.text = draft['content'];
-        }
-        if (draft['image_paths'] != null) {
-          try {
-            List<dynamic> paths = jsonDecode(draft['image_paths']);
-            _selectedPostImages.addAll(paths.map((e) => File(e.toString())));
-          } catch (e) {
-            debugPrint('Error parsing draft images: $e');
-          }
-        }
-        // Restore type if needed, or default
-        if (draft['type'] == 'broadcast') {
-          _isImageMode = false;
-        } else {
-          _isImageMode = true;
-        }
+  /// Convert duration label to an ISO 8601 expire timestamp (or null for permanent)
+  String? _durationToExpireAt(String duration) {
+    final now = DateTime.now();
+    switch (duration) {
+      case '30分钟':
+        return now.add(const Duration(minutes: 30)).toUtc().toIso8601String();
+      case '1个小时':
+        return now.add(const Duration(hours: 1)).toUtc().toIso8601String();
+      case '10小时':
+        return now.add(const Duration(hours: 10)).toUtc().toIso8601String();
+      case '1天':
+        return now.add(const Duration(days: 1)).toUtc().toIso8601String();
+      default:
+        return null; // 永久
+    }
+  }
 
-        // Restore location
-        if (draft['location_lat'] != null && draft['location_lng'] != null) {
-          _currentLocation = LocationModel(
-            latitude: draft['location_lat'],
-            longitude: draft['location_lng'],
-            placeName: draft['location_place_name'],
-            address: draft['location_address'],
-          );
-          _hasManualLocation = true;
-          _isLocationLoading =
-              false; // Override auto-location loading if draft has location
-        }
-      });
+  Future<void> _handlePublish() async {
+    // Validate
+    final content = _contentController.text.trim();
+    if (content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入内容')),
+      );
+      return;
+    }
+    if (_currentLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在获取位置，请稍候')),
+      );
+      return;
+    }
+
+    debugPrint(
+      '[_handlePublish] start, images=${_selectedPostImages.length}',
+    );
+    setState(() => _isPublishing = true);
+
+    try {
+      final remote = RemoteDataSource();
+
+      // 1. Upload images in parallel
+      debugPrint('[_handlePublish] uploading images...');
+      List<String> mediaUrls = [];
+      if (_selectedPostImages.isNotEmpty) {
+        final uploadFutures = _selectedPostImages
+            .map((file) => remote.uploadImage(file.path))
+            .toList();
+        mediaUrls = await Future.wait(uploadFutures);
+      }
+      debugPrint('[_handlePublish] images uploaded: $mediaUrls');
+
+      // 2. Create the post
+      final postType = _isImageMode ? 'bubble' : 'broadcast';
+      final title = _titleController.text.trim();
+      final expireAt = _durationToExpireAt(_selectedDuration);
+
+      debugPrint('[_handlePublish] calling createPost...');
+      final newPost = await remote.createPost(
+        contentText: content,
+        latitude: _currentLocation!.latitude,
+        longitude: _currentLocation!.longitude,
+        postType: postType,
+        title: title.isNotEmpty ? title : null,
+        addressName: _currentLocation!.placeName ?? _currentLocation!.address,
+        mediaUrls: mediaUrls.isNotEmpty ? mediaUrls : null,
+        expireAt: expireAt,
+      );
+      debugPrint('[_handlePublish] createPost OK, id=${newPost.id}');
+
+      // 3. Delete draft — 非关键路径，失败不影响发布成功反馈
+      try {
+        await _deleteDraft();
+      } catch (e) {
+        debugPrint('[_handlePublish] Delete draft failed: $e');
+      }
+
+      if (!mounted) return;
+
+      // 4. Add to PostProvider — 非关键路径，rebuild 失败不应影响发布成功反馈
+      try {
+        context.read<PostProvider>().addNewPost(newPost);
+      } catch (e, st) {
+        debugPrint('[_handlePublish] addNewPost failed: $e\n$st');
+      }
+
+      // 5. 先捕获 messenger 引用再 pop，避免 pop 后 context 失效导致 SnackBar 不显示
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('发布成功'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      debugPrint('[_handlePublish] done');
+    } catch (e, st) {
+      debugPrint('[_handlePublish] FAILED: $e\n$st');
+      if (!mounted) return;
+      setState(() => _isPublishing = false);
+
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发布失败：$msg')),
+      );
+    }
+  }
+
+  Future<void> _loadDraft() async {
+    // 包 try/catch：草稿读取失败（如本地 DB 损坏）时降级为空白，不应阻塞 sheet 打开
+    try {
+      final draft = await DatabaseHelper().getDraft();
+      if (draft != null && mounted) {
+        setState(() {
+          if (draft['title'] != null) {
+            _titleController.text = draft['title'];
+          }
+          if (draft['content'] != null) {
+            _contentController.text = draft['content'];
+          }
+          if (draft['image_paths'] != null) {
+            try {
+              List<dynamic> paths = jsonDecode(draft['image_paths']);
+              _selectedPostImages.addAll(
+                paths.map((e) => File(e.toString())),
+              );
+            } catch (e) {
+              debugPrint('Error parsing draft images: $e');
+            }
+          }
+          // Restore type if needed, or default
+          if (draft['type'] == 'broadcast') {
+            _isImageMode = false;
+          } else {
+            _isImageMode = true;
+          }
+
+          // Restore location
+          if (draft['location_lat'] != null &&
+              draft['location_lng'] != null) {
+            _currentLocation = LocationModel(
+              latitude: draft['location_lat'],
+              longitude: draft['location_lng'],
+              placeName: draft['location_place_name'],
+              address: draft['location_address'],
+            );
+            _hasManualLocation = true;
+            _isLocationLoading = false; // Override auto-location loading
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading draft: $e');
     }
   }
 
@@ -1247,19 +1547,38 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
 
     if (shouldSave == null) return; // Dismissed
 
+    bool saveOk = true;
+    String? saveErrMsg;
     if (shouldSave) {
       try {
         await _saveDraft();
       } catch (e) {
+        saveOk = false;
+        saveErrMsg = e.toString();
         debugPrint('Error saving draft: $e');
-        // Even if save fails, we should probably close or show toast.
-        // For now, allow closing.
       }
     } else {
-      await _deleteDraft();
+      try {
+        await _deleteDraft();
+      } catch (e) {
+        debugPrint('Error deleting draft: $e');
+      }
     }
 
-    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+
+    // 先捕获 messenger 再 pop，否则 pop 后 context 可能失效
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+
+    if (shouldSave) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(saveOk ? '草稿已保存' : '草稿保存失败：$saveErrMsg'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   static const List<String> _durationOptions = [
@@ -1346,20 +1665,29 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
               ),
               // Publish button (right)
               GestureDetector(
-                onTap: () {
-                  // TODO: Implement publish logic
-                },
+                onTap: _isPublishing ? null : _handlePublish,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF3FAAF0),
+                  decoration: BoxDecoration(
+                    color: _isPublishing
+                        ? const Color(0xFF3FAAF0).withAlpha(128)
+                        : const Color(0xFF3FAAF0),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.arrow_upward,
-                    size: 20,
-                    color: Colors.white,
-                  ),
+                  child: _isPublishing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.arrow_upward,
+                          size: 20,
+                          color: Colors.white,
+                        ),
                 ),
               ),
             ],

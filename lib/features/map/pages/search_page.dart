@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../presentation/providers/post_provider.dart';
+import '../../../data/datasources/remote_data_source.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/models/user_model.dart';
+import '../../profile/pages/profile_page.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -11,14 +13,20 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
+  final RemoteDataSource _remote = RemoteDataSource();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  List<PostModel> _searchResults = [];
+
+  List<PostModel> _postResults = [];
+  List<UserModel> _userResults = [];
+  bool _isLoading = false;
+  bool _hasSearched = false; // true after first search completes
+
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    // 自动聚焦搜索框
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
     });
@@ -26,21 +34,81 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
   void _onSearchChanged(String query) {
-    final provider = Provider.of<PostProvider>(context, listen: false);
-    setState(() {
-      _searchResults = provider.searchPosts(query);
+    _debounce?.cancel();
+
+    if (query.trim().isEmpty) {
+      setState(() {
+        _postResults = [];
+        _userResults = [];
+        _hasSearched = false;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // 500ms debounce
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _doSearch(query.trim());
     });
   }
 
-  void _onResultTap(PostModel post) {
-    // 返回选中的帖子
+  Future<void> _doSearch(String query) async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final data = await _remote.searchGlobal(query);
+
+      if (!mounted) return;
+
+      final posts = (data['posts'] as List?)
+              ?.map((json) => PostModel.fromJson(json as Map<String, dynamic>))
+              .toList() ??
+          [];
+      final users = (data['users'] as List?)
+              ?.map((json) => UserModel.fromJson(json as Map<String, dynamic>))
+              .toList() ??
+          [];
+
+      setState(() {
+        _postResults = posts;
+        _userResults = users;
+        _isLoading = false;
+        _hasSearched = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _hasSearched = true;
+      });
+    }
+  }
+
+  void _onPostTap(PostModel post) {
     Navigator.pop(context, post);
+  }
+
+  void _onUserTap(UserModel user) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfilePage(
+          userId: user.id,
+          userName: user.username,
+          avatarUrl: user.avatarUrl,
+          bio: user.bio,
+          gender: user.gender,
+        ),
+      ),
+    );
   }
 
   @override
@@ -51,7 +119,7 @@ class _SearchPageState extends State<SearchPage> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // 顶部搜索栏
+          // Search bar
           Container(
             padding: EdgeInsets.fromLTRB(16, topPadding + 12, 16, 12),
             decoration: BoxDecoration(
@@ -66,13 +134,11 @@ class _SearchPageState extends State<SearchPage> {
             ),
             child: Row(
               children: [
-                // 返回按钮
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: const Icon(Icons.arrow_back_ios_new, size: 22),
                 ),
                 const SizedBox(width: 12),
-                // 搜索输入框
                 Expanded(
                   child: Container(
                     height: 44,
@@ -121,17 +187,26 @@ class _SearchPageState extends State<SearchPage> {
               ],
             ),
           ),
-          // 搜索结果列表
+          // Results
           Expanded(
-            child: _searchController.text.isEmpty
-                ? _buildEmptyHint()
-                : _searchResults.isEmpty
-                ? _buildNoResults()
-                : _buildResultsList(),
+            child: _buildBody(),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildBody() {
+    if (_searchController.text.isEmpty) return _buildEmptyHint();
+    if (_isLoading) return _buildLoading();
+    if (_hasSearched && _userResults.isEmpty && _postResults.isEmpty) {
+      return _buildNoResults();
+    }
+    return _buildResultsList();
+  }
+
+  Widget _buildLoading() {
+    return const Center(child: CircularProgressIndicator());
   }
 
   Widget _buildEmptyHint() {
@@ -167,32 +242,113 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildResultsList() {
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _searchResults.length,
-      itemBuilder: (context, index) {
-        final post = _searchResults[index];
-        return _buildResultItem(post);
-      },
+      children: [
+        // Users section
+        if (_userResults.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              '用户',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+            ),
+          ),
+          ..._userResults.map(_buildUserItem),
+          if (_postResults.isNotEmpty)
+            const Divider(height: 24, indent: 16, endIndent: 16),
+        ],
+        // Posts section
+        if (_postResults.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              '帖子',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+            ),
+          ),
+          ..._postResults.map(_buildPostItem),
+        ],
+      ],
     );
   }
 
-  Widget _buildResultItem(PostModel post) {
+  Widget _buildUserItem(UserModel user) {
     return GestureDetector(
-      onTap: () => _onResultTap(post),
+      onTap: () => _onUserTap(user),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: Colors.grey[300],
+              backgroundImage: user.avatarUrl.isNotEmpty
+                  ? NetworkImage(user.avatarUrl)
+                  : null,
+              child: user.avatarUrl.isEmpty
+                  ? const Icon(Icons.person, size: 20, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.username,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (user.bio.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      user.bio,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPostItem(PostModel post) {
+    return GestureDetector(
+      onTap: () => _onPostTap(post),
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            // 用户头像
             CircleAvatar(
               radius: 24,
-              backgroundImage: NetworkImage(post.user.avatarUrl),
               backgroundColor: Colors.grey[200],
+              backgroundImage: post.user.avatarUrl.isNotEmpty
+                  ? NetworkImage(post.user.avatarUrl)
+                  : null,
+              child: post.user.avatarUrl.isEmpty
+                  ? const Icon(Icons.person, size: 20, color: Colors.white)
+                  : null,
             ),
             const SizedBox(width: 12),
-            // 帖子信息
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,7 +395,6 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
             const SizedBox(width: 12),
-            // 帖子缩略图
             if (post.imageUrls.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -248,6 +403,12 @@ class _SearchPageState extends State<SearchPage> {
                   width: 60,
                   height: 60,
                   fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 60,
+                    height: 60,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.image, color: Colors.grey),
+                  ),
                 ),
               ),
           ],

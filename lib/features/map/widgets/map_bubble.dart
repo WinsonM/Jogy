@@ -3,8 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/post_model.dart';
 import '../../../presentation/providers/post_provider.dart';
+import '../clustering/cluster_models.dart';
 
 // 核心组件：动态气泡
+//
+// 两种模式：
+// - 单点模式：传入 [post]，显示头像（展开后显示完整卡片）
+// - 聚合模式：传入 [cluster]，显示气泡内数量；不支持展开
+//
+// [post] 与 [cluster] **互斥**：必须且仅有一个非空。
 class MapBubbleWidget extends StatelessWidget {
   static const double collapsedSize = 60.0;
   static const double expandedSize = 280.0;
@@ -15,7 +22,13 @@ class MapBubbleWidget extends StatelessWidget {
   final bool isExpanded;
   final VoidCallback onTap;
   final double scaleFactor;
-  final PostModel post;
+
+  /// 单点模式：post 不为 null
+  final PostModel? post;
+
+  /// 聚合模式：cluster 不为 null
+  final ClusterNode? cluster;
+
   final double mapRotation; // 地图旋转角度（弧度）
 
   const MapBubbleWidget({
@@ -23,14 +36,23 @@ class MapBubbleWidget extends StatelessWidget {
     required this.isExpanded,
     required this.onTap,
     this.scaleFactor = 1.0,
-    required this.post,
+    this.post,
+    this.cluster,
     this.mapRotation = 0.0,
-  });
+  }) : assert(
+          (post != null) ^ (cluster != null),
+          'MapBubbleWidget 必须且仅能提供 post 或 cluster 之一',
+        );
+
+  bool get _isCluster => cluster != null;
 
   @override
   Widget build(BuildContext context) {
-    final double baseSize = isExpanded ? expandedSize : collapsedSize;
-    final double bubbleHeight = isExpanded ? expandedHeight : collapsedSize;
+    // Cluster 不支持展开态，强制使用 collapsed 尺寸
+    final effectiveExpanded = isExpanded && !_isCluster;
+    final double baseSize = effectiveExpanded ? expandedSize : collapsedSize;
+    final double bubbleHeight =
+        effectiveExpanded ? expandedHeight : collapsedSize;
 
     return GestureDetector(
       onTap: onTap,
@@ -51,31 +73,33 @@ class MapBubbleWidget extends StatelessWidget {
                 alignment: Alignment.bottomCenter, // Align content from bottom
                 clipBehavior: Clip.none,
                 children: [
-                  // 玻璃模糊效果层
-                  ClipPath(
-                    clipper: BubbleClipper(isExpanded: isExpanded),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        width: baseSize,
-                        height: bubbleHeight,
-                        color: Colors.transparent,
+                  // 玻璃模糊效果层 —— 只在「展开的单点」上渲染
+                  // cluster / 未展开单点 都跳过 BackdropFilter 以节省 GPU 开销
+                  if (effectiveExpanded)
+                    ClipPath(
+                      clipper: BubbleClipper(isExpanded: true),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          width: baseSize,
+                          height: bubbleHeight,
+                          color: Colors.transparent,
+                        ),
                       ),
                     ),
-                  ),
                   // 气泡颜色层
                   CustomPaint(
                     size: Size(baseSize, bubbleHeight),
                     painter: BubblePainter(
-                      color: const Color(0x993FAAF0), // 0x99 = 60% 不透明度
-                      isExpanded: isExpanded,
+                      color: _bubbleColor(),
+                      isExpanded: effectiveExpanded,
                     ),
                   ),
                   if (scaleFactor >= 0.5)
                     ClipPath(
-                      clipper: BubbleClipper(isExpanded: isExpanded),
+                      clipper: BubbleClipper(isExpanded: effectiveExpanded),
                       child: SizedBox.expand(
-                        child: isExpanded
+                        child: effectiveExpanded
                             ? _buildExpandedContent(context)
                             : _buildCollapsedContent(),
                       ),
@@ -89,24 +113,75 @@ class MapBubbleWidget extends StatelessWidget {
     );
   }
 
+  /// 气泡主色：cluster 按数量分级，单点沿用原本的蓝色
+  Color _bubbleColor() {
+    if (_isCluster) {
+      final n = cluster!.count;
+      if (n < 10) return const Color(0xCC3FAAF0); // 蓝（同单点，稍高不透明度）
+      if (n < 50) return const Color(0xCCFF9500); // 橙
+      return const Color(0xCCFF3B30); // 红
+    }
+    return const Color(0x993FAAF0); // 0x99 = 60% 不透明度
+  }
+
   Widget _buildCollapsedContent() {
+    if (_isCluster) {
+      return _buildClusterContent();
+    }
     return Align(
       alignment: Alignment.topCenter,
       child: Padding(
         padding: const EdgeInsets.only(top: 5), // Center inside the circle
         child: CircleAvatar(
           radius: 20,
-          backgroundImage: NetworkImage(post.user.avatarUrl),
+          backgroundImage: NetworkImage(post!.user.avatarUrl),
           onBackgroundImageError: (_, __) {},
         ),
       ),
     );
   }
 
+  /// 聚合数量显示：99+ / 999+ 截断
+  Widget _buildClusterContent() {
+    final n = cluster!.count;
+    final label = n > 999
+        ? '999+'
+        : n > 99
+            ? '99+'
+            : '$n';
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 5),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Center(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                shadows: [
+                  Shadow(
+                    offset: Offset(0, 1),
+                    blurRadius: 2.0,
+                    color: Colors.black26,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildExpandedContent(BuildContext context) {
-    final imageUrl = post.imageUrls.isNotEmpty
-        ? post.imageUrls[0]
-        : 'https://picsum.photos/300/300';
+    // 仅在 !_isCluster 分支才会进入（见 build()），post 非空可断言
+    final p = post!;
+    final imageUrl = p.imageUrls.isNotEmpty ? p.imageUrls[0] : null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 22), // 底部减少以平衡上下空间
@@ -115,17 +190,22 @@ class MapBubbleWidget extends StatelessWidget {
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey[300],
-                    child: const Icon(Icons.error),
-                  );
-                },
-              ),
+              child: imageUrl != null
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image, color: Colors.grey),
+                        );
+                      },
+                    )
+                  : Container(
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.image, color: Colors.grey),
+                    ),
             ),
           ),
           const SizedBox(height: 6), // 减少间距
@@ -140,7 +220,7 @@ class MapBubbleWidget extends StatelessWidget {
                     // 左边：用户头像
                     CircleAvatar(
                       radius: 16,
-                      backgroundImage: NetworkImage(post.user.avatarUrl),
+                      backgroundImage: NetworkImage(p.user.avatarUrl),
                       onBackgroundImageError: (_, __) {},
                     ),
                     // 右边：like 和 star 按钮横向排列
@@ -150,26 +230,26 @@ class MapBubbleWidget extends StatelessWidget {
                         // Like 按钮
                         GestureDetector(
                           onTap: () {
-                            postProvider.toggleLike(post.id);
+                            postProvider.toggleLike(p.id);
                           },
                           child: Icon(
-                            post.isLiked
+                            p.isLiked
                                 ? Icons.favorite
                                 : Icons.favorite_border,
                             size: 22,
-                            color: post.isLiked ? Colors.red : Colors.black54,
+                            color: p.isLiked ? Colors.red : Colors.black54,
                           ),
                         ),
                         const SizedBox(width: 12),
                         // Star 按钮
                         GestureDetector(
                           onTap: () {
-                            postProvider.toggleFavorite(post.id);
+                            postProvider.toggleFavorite(p.id);
                           },
                           child: Icon(
-                            post.isFavorited ? Icons.star : Icons.star_border,
+                            p.isFavorited ? Icons.star : Icons.star_border,
                             size: 22,
-                            color: post.isFavorited
+                            color: p.isFavorited
                                 ? Colors.amber
                                 : Colors.black54,
                           ),

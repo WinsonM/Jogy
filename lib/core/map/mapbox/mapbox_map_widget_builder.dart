@@ -120,10 +120,14 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
   }
 
   void _onMapIdle(mapbox.MapIdleEventData event) {
-    _updateCameraState(MapMoveSource.programmatic);
+    // Idle 路径：刷新相机状态 + 广播 idle 事件给订阅者
+    _updateCameraState(MapMoveSource.programmatic, notifyIdle: true);
   }
 
-  Future<void> _updateCameraState(MapMoveSource source) async {
+  Future<void> _updateCameraState(
+    MapMoveSource source, {
+    bool notifyIdle = false,
+  }) async {
     if (_controller == null) return;
 
     try {
@@ -145,11 +149,17 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
       _controller!.updateCameraState(newState);
 
+      final event = MapCameraEvent(camera: newState, source: source);
+
       // 触发外部回调
-      widget.options.onCameraMove?.call(MapCameraEvent(
-        camera: newState,
-        source: source,
-      ));
+      widget.options.onCameraMove?.call(event);
+
+      if (notifyIdle) {
+        // 广播给 controller 的 stream 订阅者（聚合模块等）
+        _controller!.emitCameraIdle(event);
+        // 触发外部 onCameraIdle 回调
+        widget.options.onCameraIdle?.call(event);
+      }
     } catch (_) {
       // 地图可能正在初始化
     }

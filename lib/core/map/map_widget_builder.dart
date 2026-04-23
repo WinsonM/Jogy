@@ -32,6 +32,12 @@ class JogyMapOptions {
   /// 相机移动事件回调
   final void Function(MapCameraEvent event)? onCameraMove;
 
+  /// 相机停止移动事件回调（手势结束 / 动画结束）
+  ///
+  /// 比 [onCameraMove] 节流：用户拖动/缩放过程中不触发，
+  /// 停下后触发一次。用于聚合重算、按视口刷新等懒操作。
+  final void Function(MapCameraEvent event)? onCameraIdle;
+
   /// 地图点击回调
   final void Function(MapLatLng latLng)? onTap;
 
@@ -45,6 +51,7 @@ class JogyMapOptions {
     this.followHeadingOnStart = true,
     this.onMapCreated,
     this.onCameraMove,
+    this.onCameraIdle,
     this.onTap,
   });
 }

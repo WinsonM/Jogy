@@ -72,16 +72,19 @@ class _PostCard extends StatelessWidget {
               ),
               child: AspectRatio(
                 aspectRatio: _getRandomAspectRatio(),
-                child: Image.network(
-                  post.imageUrls.isNotEmpty
-                      ? post.imageUrls.first
-                      : 'https://picsum.photos/200/300?random=${post.id.hashCode}',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.image, color: Colors.grey),
-                  ),
-                ),
+                child: post.imageUrls.isNotEmpty
+                    ? Image.network(
+                        post.imageUrls.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.image, color: Colors.grey),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.image, color: Colors.grey),
+                      ),
               ),
             ),
             // Content

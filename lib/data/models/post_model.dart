@@ -32,14 +32,34 @@ class PostModel {
   });
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
+    // Safe user parse — 缺失/null 不再崩溃
+    final userJson = json['user'];
+    final user = (userJson is Map<String, dynamic>)
+        ? UserModel.fromJson(userJson)
+        : const UserModel(id: '', username: '未知', avatarUrl: '', bio: '');
+
+    // Safe location parse
+    final locJson = json['location'];
+    final location = (locJson is Map<String, dynamic>)
+        ? LocationModel.fromJson(locJson)
+        : const LocationModel(latitude: 0, longitude: 0);
+
+    // Safe createdAt parse
+    DateTime createdAt;
+    final rawCreatedAt = json['createdAt'];
+    if (rawCreatedAt is String) {
+      createdAt = DateTime.tryParse(rawCreatedAt) ?? DateTime.now();
+    } else {
+      createdAt = DateTime.now();
+    }
+
     return PostModel(
-      id: json['id'].toString(),
-      user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
-      location: LocationModel.fromJson(
-        json['location'] as Map<String, dynamic>,
-      ),
+      id: json['id']?.toString() ?? '',
+      user: user,
+      location: location,
       content: json['content'] as String? ?? '',
-      imageUrls: (json['imageUrls'] as List<dynamic>?)
+      imageUrls:
+          (json['imageUrls'] as List<dynamic>?)
               ?.cast<String>()
               .map((url) => ApiConstants.resolveUrl(url))
               .toList() ??
@@ -50,10 +70,17 @@ class PostModel {
       isFavorited: json['isFavorited'] as bool? ?? false,
       comments:
           (json['comments'] as List<dynamic>?)
-              ?.map((e) => CommentModel.fromJson(e as Map<String, dynamic>))
+              ?.map((e) {
+                try {
+                  return CommentModel.fromJson(e as Map<String, dynamic>);
+                } catch (_) {
+                  return null;
+                }
+              })
+              .whereType<CommentModel>()
               .toList() ??
           [],
-      createdAt: DateTime.parse(json['createdAt'].toString()),
+      createdAt: createdAt,
     );
   }
 

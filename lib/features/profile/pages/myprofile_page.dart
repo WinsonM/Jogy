@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import '../../auth/pages/login_page.dart';
-import '../widgets/posts_timeline.dart';
+import 'package:provider/provider.dart';
+import '../../../core/services/auth_service.dart';
+import '../../../data/datasources/remote_data_source.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
-import '../../../data/models/location_model.dart';
+import '../../auth/pages/login_page.dart';
+import '../widgets/posts_timeline.dart';
 import 'edit_profile_page.dart';
 import 'browsing_history_page.dart';
 import '../widgets/user_list_page.dart';
@@ -21,8 +23,10 @@ class MyProfilePage extends StatefulWidget {
 }
 
 class _MyProfilePageState extends State<MyProfilePage> {
+  final RemoteDataSource _remote = RemoteDataSource();
+
   int _selectedTabIndex = 0; // 0: 帖子, 1: 喜欢, 2: 收藏
-  bool _isMapView = false; // Toggle between timeline and map view
+  bool _isMapView = false;
 
   // 滚动控制器
   final ScrollController _scrollController = ScrollController();
@@ -31,221 +35,76 @@ class _MyProfilePageState extends State<MyProfilePage> {
   final GlobalKey _pinnedTabKey = GlobalKey();
   double _pinnedTabY = 0.0;
 
-  // 模拟当前用户数据（可编辑）
-  String _userName = '我的用户名';
-  String _avatarUrl = 'https://i.pravatar.cc/300?img=5';
+  // User data — loaded from API
+  String _userName = '';
+  String _avatarUrl = '';
   File? _localAvatarFile;
-  String _bio = '这是我的个人简介 ✨';
+  String _bio = '';
   String _gender = '保密';
   DateTime? _birthday;
-  final int _postsCount = 42;
-  final int _followersCount = 1234;
-  final int _followingCount = 567;
+  int _followersCount = 0;
+  int _followingCount = 0;
 
-  // Mock followers list
-  final List<UserModel> _mockFollowers = const [
-    UserModel(
-      id: 'follower_1',
-      username: '小明',
-      avatarUrl: 'https://i.pravatar.cc/150?img=1',
-      bio: '热爱生活的旅行者 🌍',
-    ),
-    UserModel(
-      id: 'follower_2',
-      username: '小红',
-      avatarUrl: 'https://i.pravatar.cc/150?img=2',
-      bio: '美食博主 | 摄影爱好者',
-    ),
-    UserModel(
-      id: 'follower_3',
-      username: '张三',
-      avatarUrl: 'https://i.pravatar.cc/150?img=3',
-      bio: '程序员 | 咖啡控 ☕',
-    ),
-  ];
+  // Posts — loaded from API
+  List<PostModel> _myPosts = [];
+  List<PostModel> _likedPosts = [];
+  List<PostModel> _favoritedPosts = [];
 
-  // Mock following list
-  final List<UserModel> _mockFollowing = const [
-    UserModel(
-      id: 'following_1',
-      username: '李四',
-      avatarUrl: 'https://i.pravatar.cc/150?img=4',
-      bio: '设计师 | 艺术爱好者',
-    ),
-    UserModel(
-      id: 'following_2',
-      username: '王五',
-      avatarUrl: 'https://i.pravatar.cc/150?img=5',
-      bio: '健身达人 💪',
-    ),
-  ];
-
-  // 模拟帖子数据
-  late List<PostModel> _mockPosts;
-  late List<PostModel> _likedPosts;
-  late List<PostModel> _favoritedPosts;
+  bool _isLoading = true;
+  String? _userId; // current user id for follow list queries
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _mockPosts = _generateMockPosts();
-    _likedPosts = _generateLikedPosts();
-    _favoritedPosts = _generateFavoritedPosts();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updatePinnedTabY();
     });
+    _loadProfile();
   }
 
-  /// 生成模拟帖子数据
-  List<PostModel> _generateMockPosts() {
-    final now = DateTime.now();
-    final mockUser = UserModel(
-      id: 'my_user',
-      username: _userName,
-      avatarUrl: _avatarUrl,
-      bio: _bio,
-    );
-    const mockLocation = LocationModel(
-      latitude: 31.2304,
-      longitude: 121.4737,
-      address: '上海市',
-    );
+  Future<void> _loadProfile() async {
+    // Sync auth token to our local RemoteDataSource instance
+    final auth = context.read<AuthService>();
+    if (auth.currentUser != null) {
+      _applyUserData(auth.currentUser!);
+    }
 
-    return [
-      PostModel(
-        id: 'my_post_1',
-        user: mockUser,
-        location: mockLocation,
-        content: '今天天气真好，出去走走 🌞',
-        imageUrls: const ['https://picsum.photos/200/200?random=101'],
-        createdAt: now.subtract(const Duration(hours: 2)),
-      ),
-      PostModel(
-        id: 'my_post_2',
-        user: mockUser,
-        location: mockLocation,
-        content: '分享一些最近的摄影作品',
-        imageUrls: const [
-          'https://picsum.photos/200/200?random=102',
-          'https://picsum.photos/200/200?random=103',
-          'https://picsum.photos/200/200?random=104',
-        ],
-        createdAt: now.subtract(const Duration(days: 1)),
-      ),
-      PostModel(
-        id: 'my_post_3',
-        user: mockUser,
-        location: mockLocation,
-        content: '周末的小确幸 ☕',
-        imageUrls: const [
-          'https://picsum.photos/200/200?random=105',
-          'https://picsum.photos/200/200?random=106',
-        ],
-        createdAt: now.subtract(const Duration(days: 3)),
-      ),
-      PostModel(
-        id: 'my_post_4',
-        user: mockUser,
-        location: mockLocation,
-        content: '记录生活的美好瞬间',
-        imageUrls: const [
-          'https://picsum.photos/200/200?random=107',
-          'https://picsum.photos/200/200?random=108',
-          'https://picsum.photos/200/200?random=109',
-          'https://picsum.photos/200/200?random=110',
-        ],
-        createdAt: DateTime(2025, 10, 15),
-      ),
-    ];
+    try {
+      final user = await _remote.getCurrentUser();
+      if (!mounted) return;
+      _applyUserData(user);
+      _userId = user.id;
+
+      // Load posts in parallel
+      final results = await Future.wait([
+        _remote.fetchPostsByUser(user.id),
+        _remote.fetchLikedPosts(user.id),
+        _remote.fetchFavoritedPosts(user.id),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _myPosts = results[0];
+        _likedPosts = results[1];
+        _favoritedPosts = results[2];
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
   }
 
-  /// 生成喜欢的帖子 (模拟其他用户的帖子)
-  List<PostModel> _generateLikedPosts() {
-    final now = DateTime.now();
-    return [
-      PostModel(
-        id: 'liked_post_1',
-        user: const UserModel(
-          id: 'user_a',
-          username: '摄影师小王',
-          avatarUrl: 'https://i.pravatar.cc/150?img=10',
-          bio: '摄影爱好者',
-        ),
-        location: const LocationModel(latitude: 31.24, longitude: 121.48),
-        content: '城市夜景 🌃',
-        imageUrls: const ['https://picsum.photos/200/200?random=201'],
-        createdAt: now.subtract(const Duration(hours: 5)),
-        isLiked: true,
-      ),
-      PostModel(
-        id: 'liked_post_2',
-        user: const UserModel(
-          id: 'user_b',
-          username: '美食家小李',
-          avatarUrl: 'https://i.pravatar.cc/150?img=11',
-          bio: '美食博主',
-        ),
-        location: const LocationModel(latitude: 31.22, longitude: 121.46),
-        content: '今天的下午茶 ☕🍰',
-        imageUrls: const [
-          'https://picsum.photos/200/200?random=202',
-          'https://picsum.photos/200/200?random=203',
-        ],
-        createdAt: now.subtract(const Duration(days: 1)),
-        isLiked: true,
-      ),
-      PostModel(
-        id: 'liked_post_3',
-        user: const UserModel(
-          id: 'user_c',
-          username: '旅行者阿明',
-          avatarUrl: 'https://i.pravatar.cc/150?img=12',
-          bio: '环游世界',
-        ),
-        location: const LocationModel(latitude: 31.25, longitude: 121.50),
-        content: '海边日落 🌅',
-        imageUrls: const ['https://picsum.photos/200/200?random=204'],
-        createdAt: now.subtract(const Duration(days: 2)),
-        isLiked: true,
-      ),
-    ];
-  }
-
-  /// 生成收藏的帖子
-  List<PostModel> _generateFavoritedPosts() {
-    final now = DateTime.now();
-    return [
-      PostModel(
-        id: 'fav_post_1',
-        user: const UserModel(
-          id: 'user_d',
-          username: '健身教练小张',
-          avatarUrl: 'https://i.pravatar.cc/150?img=20',
-          bio: '健身达人',
-        ),
-        location: const LocationModel(latitude: 31.21, longitude: 121.44),
-        content: '今日训练打卡 💪',
-        imageUrls: const ['https://picsum.photos/200/200?random=301'],
-        createdAt: now.subtract(const Duration(hours: 8)),
-        isFavorited: true,
-      ),
-      PostModel(
-        id: 'fav_post_2',
-        user: const UserModel(
-          id: 'user_e',
-          username: '程序员老陈',
-          avatarUrl: 'https://i.pravatar.cc/150?img=21',
-          bio: '代码人生',
-        ),
-        location: const LocationModel(latitude: 31.26, longitude: 121.52),
-        content: '深夜码代码的日常 💻',
-        imageUrls: const ['https://picsum.photos/200/200?random=302'],
-        createdAt: now.subtract(const Duration(days: 3)),
-        isFavorited: true,
-      ),
-    ];
+  void _applyUserData(UserModel user) {
+    setState(() {
+      _userName = user.username;
+      _avatarUrl = user.avatarUrl;
+      _bio = user.bio;
+      _gender = user.gender;
+      _followersCount = user.followers;
+      _followingCount = user.following;
+    });
   }
 
   @override
@@ -284,6 +143,31 @@ class _MyProfilePageState extends State<MyProfilePage> {
     }
     final scrollTabY = scrollBox.localToGlobal(Offset.zero).dy;
     return scrollTabY <= _pinnedTabY;
+  }
+
+  /// Open followers or following list fetched from API
+  void _openFollowList(UserListType listType) async {
+    if (_userId == null) return;
+    try {
+      final data = listType == UserListType.followers
+          ? await _remote.fetchFollowers(_userId!)
+          : await _remote.fetchFollowing(_userId!);
+      final users = (data['users'] as List)
+          .map((json) => UserModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UserListPage(listType: listType, users: users),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('加载失败：${e.toString().replaceFirst("Exception: ", "")}')),
+      );
+    }
   }
 
   void _openSettings() {
@@ -331,13 +215,25 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 // 顶部留白
                 SizedBox(height: topPadding + 20),
                 // 头像
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.grey[300],
-                  backgroundImage: _localAvatarFile != null
-                      ? FileImage(_localAvatarFile!) as ImageProvider
-                      : NetworkImage(_avatarUrl),
-                ),
+                if (_isLoading)
+                  const CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.grey,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.grey[300],
+                    backgroundImage: _localAvatarFile != null
+                        ? FileImage(_localAvatarFile!) as ImageProvider
+                        : (_avatarUrl.isNotEmpty
+                            ? NetworkImage(_avatarUrl)
+                            : null),
+                    child: _avatarUrl.isEmpty && _localAvatarFile == null
+                        ? const Icon(Icons.person, size: 40, color: Colors.white)
+                        : null,
+                  ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -412,7 +308,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildStatItem('$_postsCount', '发布'),
+                    _buildStatItem('${_myPosts.length}', '发布'),
                     Container(
                       height: 30,
                       width: 1,
@@ -422,17 +318,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
                     _buildStatItem(
                       '$_followersCount',
                       '粉丝',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserListPage(
-                              listType: UserListType.followers,
-                              users: _mockFollowers,
-                            ),
-                          ),
-                        );
-                      },
+                      onTap: () => _openFollowList(UserListType.followers),
                     ),
                     Container(
                       height: 30,
@@ -443,17 +329,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
                     _buildStatItem(
                       '$_followingCount',
                       '关注',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserListPage(
-                              listType: UserListType.following,
-                              users: _mockFollowing,
-                            ),
-                          ),
-                        );
-                      },
+                      onTap: () => _openFollowList(UserListType.following),
                     ),
                   ],
                 ),
@@ -757,7 +633,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: PostsMapView(
-                  posts: _mockPosts,
+                  posts: _myPosts,
                   onPostTap: (post) {
                     Navigator.push(
                       context,
@@ -770,7 +646,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
               )
             else
               PostsTimeline(
-                posts: _mockPosts,
+                posts: _myPosts,
                 onPostTap: (post) {
                   Navigator.push(
                     context,
@@ -972,8 +848,10 @@ class _SettingsDrawer extends StatelessWidget {
                     child: BackdropFilter(
                       filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                       child: GestureDetector(
-                        onTap: () {
-                          // 导航到登录页并清除所有历史路由
+                        onTap: () async {
+                          // Clear tokens and navigate to login
+                          await context.read<AuthService>().logout();
+                          if (!context.mounted) return;
                           Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(
                               builder: (_) => const LoginPage(),

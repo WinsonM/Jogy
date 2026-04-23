@@ -24,16 +24,6 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   void _showShareSheet(BuildContext context) {
-    // Mock chat contacts for sharing
-    final List<Map<String, String>> chatContacts = [
-      {'name': '小明', 'avatar': 'https://i.pravatar.cc/150?img=1'},
-      {'name': '小红', 'avatar': 'https://i.pravatar.cc/150?img=2'},
-      {'name': '张三', 'avatar': 'https://i.pravatar.cc/150?img=3'},
-      {'name': '李四', 'avatar': 'https://i.pravatar.cc/150?img=4'},
-      {'name': '王五', 'avatar': 'https://i.pravatar.cc/150?img=5'},
-      {'name': '赵六', 'avatar': 'https://i.pravatar.cc/150?img=6'},
-    ];
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -57,49 +47,10 @@ class _DetailPageState extends State<DetailPage> {
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  '分享给好友',
+                  '分享',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: chatContacts.length,
-                  itemBuilder: (context, index) {
-                    final contact = chatContacts[index];
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('已分享给 ${contact['name']}')),
-                        );
-                      },
-                      child: Container(
-                        width: 70,
-                        margin: const EdgeInsets.only(right: 12),
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 28,
-                              backgroundImage: NetworkImage(contact['avatar']!),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              contact['name']!,
-                              style: const TextStyle(fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const Divider(),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
