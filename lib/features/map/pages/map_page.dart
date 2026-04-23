@@ -1430,12 +1430,34 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
       // 5. 先捕获 messenger 引用再 pop，避免 pop 后 context 失效导致 SnackBar 不显示
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('发布成功'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+
+      // 复位发布状态（下次再打开 sheet 按钮是干净状态，而非残留 spinner）
+      if (mounted) {
+        setState(() => _isPublishing = false);
+      }
+
+      // 清掉可能排队中的 "请输入内容" / "正在获取位置" 等旧 SnackBar，
+      // 再排当前绿色成功 toast，确保这条就是用户在主页看到的。
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  '发布成功',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF22C55E), // green-500
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       debugPrint('[_handlePublish] done');
     } catch (e, st) {
       debugPrint('[_handlePublish] FAILED: $e\n$st');
