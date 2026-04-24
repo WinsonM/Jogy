@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/post_model.dart';
 import '../../../presentation/providers/post_provider.dart';
-import '../../profile/pages/profile_page.dart';
+import '../../profile/profile_navigation.dart';
 
 class DetailPage extends StatefulWidget {
   final String? postId;
@@ -216,15 +216,10 @@ class _DetailPageState extends State<DetailPage> {
                             Row(
                               children: [
                                 GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            ProfilePage(userId: post.user.id),
-                                      ),
-                                    );
-                                  },
+                                  onTap: () => openUserProfile(
+                                    context,
+                                    userId: post.user.id,
+                                  ),
                                   child: CircleAvatar(
                                     radius: 20,
                                     backgroundImage: NetworkImage(
@@ -235,15 +230,10 @@ class _DetailPageState extends State<DetailPage> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              ProfilePage(userId: post.user.id),
-                                        ),
-                                      );
-                                    },
+                                    onTap: () => openUserProfile(
+                                      context,
+                                      userId: post.user.id,
+                                    ),
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,

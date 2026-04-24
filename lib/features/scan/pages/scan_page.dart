@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../data/datasources/remote_data_source.dart';
-import '../../profile/pages/profile_page.dart';
+import '../../profile/profile_navigation.dart';
 import '../../detail/pages/detail_page.dart';
 
 class ScanPage extends StatefulWidget {
@@ -46,12 +46,7 @@ class _ScanPageState extends State<ScanPage> {
 
       switch (targetType) {
         case 'user_profile':
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ProfilePage(userId: targetId),
-            ),
-          );
+          await openUserProfile(context, userId: targetId, replace: true);
           break;
         case 'post':
           Navigator.pushReplacement(

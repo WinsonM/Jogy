@@ -418,6 +418,29 @@ class _MyProfilePageState extends State<MyProfilePage> {
               ),
             ),
           ),
+          // 固定的返回按钮 - 左上角（仅当通过 Navigator.push 进来时显示；
+          // 从 HomeWrapper 的 IndexedStack 渲染时 canPop=false，不出现）
+          if (Navigator.canPop(context))
+            Positioned(
+              top: topPadding + 12,
+              left: 16,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: Colors.black,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
           // 固定的设置按钮 - 右上角
           Positioned(
             top: topPadding + 12,

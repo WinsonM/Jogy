@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../data/models/user_model.dart';
-import '../pages/profile_page.dart';
+import '../profile_navigation.dart';
 
 enum UserListType { followers, following }
 
@@ -136,17 +136,13 @@ class _UserListPageState extends State<UserListPage> {
   Widget _buildUserTile(BuildContext context, UserModel user) {
     return ListTile(
       onTap: () {
-        Navigator.push(
+        openUserProfile(
           context,
-          MaterialPageRoute(
-            builder: (_) => ProfilePage(
-              userId: user.id,
-              userName: user.username,
-              avatarUrl: user.avatarUrl,
-              bio: user.bio,
-              gender: user.gender,
-            ),
-          ),
+          userId: user.id,
+          userName: user.username,
+          avatarUrl: user.avatarUrl,
+          bio: user.bio,
+          gender: user.gender,
         );
       },
       leading: CircleAvatar(

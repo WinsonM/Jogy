@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../../core/database/database_helper.dart'; // Import DatabaseHelper
-import '../../profile/pages/profile_page.dart';
+import '../../profile/profile_navigation.dart';
 
 class ChatPage extends StatefulWidget {
   // ...
@@ -573,15 +573,13 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _navigateToProfile() {
-    Navigator.push(
+    // ChatPage 目前不持有对方 userId（widget 只有 userName/avatarUrl），
+    // helper 对 null userId 安全：直接回退到 ProfilePage —— 与改前行为等价。
+    openUserProfile(
       context,
-      MaterialPageRoute(
-        builder: (context) => ProfilePage(
-          userName: widget.userName,
-          avatarUrl: widget.avatarUrl,
-          isFollowing: false, // Default to false or fetch from DB
-        ),
-      ),
+      userName: widget.userName,
+      avatarUrl: widget.avatarUrl,
+      isFollowing: false,
     );
   }
 

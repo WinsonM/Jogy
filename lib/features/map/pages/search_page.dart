@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/datasources/remote_data_source.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
-import '../../profile/pages/profile_page.dart';
+import '../../profile/profile_navigation.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -97,17 +97,13 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _onUserTap(UserModel user) {
-    Navigator.push(
+    openUserProfile(
       context,
-      MaterialPageRoute(
-        builder: (_) => ProfilePage(
-          userId: user.id,
-          userName: user.username,
-          avatarUrl: user.avatarUrl,
-          bio: user.bio,
-          gender: user.gender,
-        ),
-      ),
+      userId: user.id,
+      userName: user.username,
+      avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      gender: user.gender,
     );
   }
 
