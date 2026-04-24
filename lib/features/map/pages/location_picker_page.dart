@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../../config/map_config.dart';
 import '../../../data/models/location_model.dart';
+import '../../../utils/mapbox_language.dart';
 
 class LocationPickerPage extends StatefulWidget {
   final double initialLat;
@@ -44,72 +45,118 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     super.dispose();
   }
 
-  // ── Mapbox Geocoding v5 API ─────────────────────────────
+  // ── Mapbox Tilequery + Geocoding API ────────────────────
+  //
+  // 附近地点 = 两个 API 并行:
+  //   1) Geocoding v5 /reverse  → 只为"当前位置"拿可读地址
+  //   2) Tilequery /v4/.../poi_label → 半径内周边 POI（有距离排序）
+  //
+  // 不用 Geocoding 单独拿周边 POI — 那 API 返回的是"坐标所属的行政层级"
+  // (country/region/place/neighborhood/address)，非真正的"附近有什么"。
 
-  /// 反向地理编码：根据当前坐标获取附近地点
+  /// 装载"当前位置 + 附近 POI"列表
   Future<void> _loadNearbyPlaces() async {
+    final results = await Future.wait([
+      _fetchCurrentAddress(),
+      _fetchNearbyPOIs(),
+    ]);
+    if (!mounted) return;
+
+    final currentAddress = results[0] as String;
+    final nearbyPOIs = results[1] as List<_PlaceItem>;
+
+    setState(() {
+      _nearbyPlaces = [
+        // 固定第一项：当前精确位置
+        _PlaceItem(
+          name: '当前位置',
+          address: currentAddress,
+          latitude: widget.initialLat,
+          longitude: widget.initialLng,
+          icon: Icons.my_location,
+        ),
+        ...nearbyPOIs,
+      ];
+      _isLoading = false;
+    });
+  }
+
+  /// 反向地理编码：只为拿"当前位置"的可读街道地址
+  Future<String> _fetchCurrentAddress() async {
     try {
       final response = await _dio.get(
         'https://api.mapbox.com/geocoding/v5/mapbox.places/'
         '${widget.initialLng},${widget.initialLat}.json',
         queryParameters: {
           'access_token': _token,
-          'language': 'zh',
-          'limit': 5,
+          'language': mapboxLanguage(),
+          'limit': 1,
+          'types': 'address,neighborhood,place',
+        },
+      );
+      final features = response.data['features'] as List? ?? [];
+      if (features.isEmpty) return _coordFallback();
+      return (features.first['place_name'] as String?) ?? _coordFallback();
+    } catch (_) {
+      return _coordFallback();
+    }
+  }
+
+  String _coordFallback() =>
+      '${widget.initialLat.toStringAsFixed(6)}, '
+      '${widget.initialLng.toStringAsFixed(6)}';
+
+  /// Tilequery API — 半径内的周边 POI，按距离排序
+  Future<List<_PlaceItem>> _fetchNearbyPOIs() async {
+    try {
+      final lang = mapboxLanguage();
+      final response = await _dio.get(
+        'https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/tilequery/'
+        '${widget.initialLng},${widget.initialLat}.json',
+        queryParameters: {
+          'access_token': _token,
+          'radius': 500, // 米，Tilequery 硬上限 1000
+          'limit': 25, // 硬上限 50
+          'layers': 'poi_label',
+          'geometry': 'point',
+          'dedupe': true,
         },
       );
 
-      if (!mounted) return;
-
       final features = response.data['features'] as List? ?? [];
+      final items = <_PlaceItem>[];
 
-      final places = <_PlaceItem>[
-        // 固定第一项：当前精确位置
-        _PlaceItem(
-          name: '当前位置',
-          address: features.isNotEmpty
-              ? _extractAddress(features.first)
-              : '${widget.initialLat.toStringAsFixed(6)}, '
-                  '${widget.initialLng.toStringAsFixed(6)}',
-          latitude: widget.initialLat,
-          longitude: widget.initialLng,
-          icon: Icons.my_location,
-        ),
-      ];
+      for (final f in features) {
+        final props = (f['properties'] as Map?)?.cast<String, dynamic>() ?? {};
+        final coords = f['geometry']?['coordinates'] as List?;
+        if (coords == null || coords.length < 2) continue;
 
-      // 将反向编码结果加入列表
-      for (final feature in features) {
-        final coords = feature['geometry']?['coordinates'] as List?;
-        if (coords != null && coords.length >= 2) {
-          places.add(_PlaceItem(
-            name: feature['text'] as String? ?? '',
-            address: _extractAddress(feature),
-            latitude: (coords[1] as num).toDouble(),
-            longitude: (coords[0] as num).toDouble(),
-          ));
-        }
+        // 名称 fallback：本地化 → 默认 → class → skip
+        final cls = (props['class'] as String?) ?? '';
+        String? pick(String? s) =>
+            (s != null && s.trim().isNotEmpty) ? s : null;
+        final name = pick(props['name_$lang'] as String?) ??
+            pick(props['name'] as String?) ??
+            cls;
+        if (name.isEmpty) continue;
+
+        final distance =
+            (props['tilequery']?['distance'] as num?)?.toDouble() ?? 0.0;
+        final distanceLabel = '${distance.toStringAsFixed(0)} m';
+        final address = cls.isEmpty ? distanceLabel : '$cls · $distanceLabel';
+
+        items.add(_PlaceItem(
+          name: name,
+          address: address,
+          latitude: (coords[1] as num).toDouble(),
+          longitude: (coords[0] as num).toDouble(),
+          icon: Icons.place_outlined,
+        ));
       }
 
-      setState(() {
-        _nearbyPlaces = places;
-        _isLoading = false;
-      });
+      return items;
     } catch (_) {
-      if (!mounted) return;
-      // 即使 API 失败也保留"当前位置"可选
-      setState(() {
-        _nearbyPlaces = [
-          _PlaceItem(
-            name: '当前位置',
-            address: '${widget.initialLat.toStringAsFixed(6)}, '
-                '${widget.initialLng.toStringAsFixed(6)}',
-            latitude: widget.initialLat,
-            longitude: widget.initialLng,
-            icon: Icons.my_location,
-          ),
-        ];
-        _isLoading = false;
-      });
+      return [];
     }
   }
 

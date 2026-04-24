@@ -24,6 +24,7 @@ import '../../detail/pages/detail_page.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../../config/map_config.dart';
 import '../../../data/models/post_model.dart';
+import '../../../utils/mapbox_language.dart';
 import 'package:dio/dio.dart';
 import 'search_page.dart';
 import '../../scan/pages/scan_page.dart';
@@ -1280,7 +1281,7 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
           '${currentPos.longitude},${currentPos.latitude}.json',
           queryParameters: {
             'access_token': MapConfig.mapboxApiKey,
-            'language': 'zh',
+            'language': mapboxLanguage(),
             'limit': 1,
           },
         );
