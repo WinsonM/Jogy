@@ -76,21 +76,48 @@ class _MyProfilePageState extends State<MyProfilePage> {
       _applyUserData(user);
       _userId = user.id;
 
-      // Load posts in parallel
-      final results = await Future.wait([
-        _remote.fetchPostsByUser(user.id),
-        _remote.fetchLikedPosts(user.id),
-        _remote.fetchFavoritedPosts(user.id),
-      ]);
+      // 三个 fetch 各自独立。早先用 Future.wait 任何一条挂掉就会让其它两条
+      // 的成功结果也被丢弃 → 整页 0 post。改成并行触发 + 各自 catch，
+      // 让每条 tab 独立 succeed/fail。失败时打日志（之前是静默的）。
+      final myPostsFut = _remote.fetchPostsByUser(user.id).then(
+        (v) => v,
+        onError: (e, st) {
+          debugPrint('[MyProfile] fetchPostsByUser FAILED: $e\n$st');
+          return <PostModel>[];
+        },
+      );
+      final likedFut = _remote.fetchLikedPosts(user.id).then(
+        (v) => v,
+        onError: (e, st) {
+          debugPrint('[MyProfile] fetchLikedPosts FAILED: $e\n$st');
+          return <PostModel>[];
+        },
+      );
+      final favoritedFut = _remote.fetchFavoritedPosts(user.id).then(
+        (v) => v,
+        onError: (e, st) {
+          debugPrint('[MyProfile] fetchFavoritedPosts FAILED: $e\n$st');
+          return <PostModel>[];
+        },
+      );
+
+      final myPosts = await myPostsFut;
+      final liked = await likedFut;
+      final favorited = await favoritedFut;
 
       if (!mounted) return;
+      debugPrint(
+        '[MyProfile] loaded user=${user.id} '
+        'myPosts=${myPosts.length} liked=${liked.length} favorited=${favorited.length}',
+      );
       setState(() {
-        _myPosts = results[0];
-        _likedPosts = results[1];
-        _favoritedPosts = results[2];
+        _myPosts = myPosts;
+        _likedPosts = liked;
+        _favoritedPosts = favorited;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[MyProfile] _loadProfile FAILED: $e\n$st');
       if (!mounted) return;
       setState(() => _isLoading = false);
     }

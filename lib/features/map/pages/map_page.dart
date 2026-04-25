@@ -162,10 +162,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       _locationLoading = false;
     });
     if (mounted) {
-      Provider.of<PostProvider>(context, listen: false).fetchPostsByLocation(
-        latitude: defaultLat,
-        longitude: defaultLng,
-      );
+      Provider.of<PostProvider>(
+        context,
+        listen: false,
+      ).fetchPostsByLocation(latitude: defaultLat, longitude: defaultLng);
     }
   }
 
@@ -436,9 +436,15 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
         final viewportSize = _jogyMapController!.cameraState.viewportSize;
         final offset = _expandedBubbleCenterOffset(viewportSize);
-        final target = MapLatLng(result.location.latitude, result.location.longitude);
+        final target = MapLatLng(
+          result.location.latitude,
+          result.location.longitude,
+        );
         final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
-          target, 16, offset.dx, offset.dy,
+          target,
+          16,
+          offset.dx,
+          offset.dy,
         );
         _jogyMapController!.moveTo(adjustedCenter, zoom: 16);
       }
@@ -543,8 +549,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     );
   }
 
-  void _openMessagePage() {
-    showModalBottomSheet(
+  Future<void> _openMessagePage() async {
+    final newPost = await showModalBottomSheet<PostModel>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -557,6 +563,67 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         child: const _MessageSheetContent(),
       ),
     );
+    if (!mounted || newPost == null) return;
+
+    debugPrint(
+      '[MapPage] publish returned id=${newPost.id}, '
+      'location=${newPost.location.latitude},${newPost.location.longitude}',
+    );
+
+    _cameraMoveDebounce?.cancel();
+    _cameraMoveDebounce = null;
+
+    context.read<PostProvider>().addNewPost(newPost);
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    showCenterToast(context, message: '发布成功');
+
+    await _focusPublishedPost(newPost);
+  }
+
+  Future<void> _focusPublishedPost(PostModel post) async {
+    final posts = context.read<PostProvider>().posts;
+    final index = posts.indexWhere((p) => p.id == post.id);
+
+    if (mounted) {
+      setState(() {
+        if (index >= 0) {
+          _manualExpandedIndex = index;
+          _expandedIndex = index;
+        }
+        _suppressedAutoIndex = null;
+        _autoExpandDisabled = false;
+        _clusterResults = const [];
+        _postScreenPoints.clear();
+      });
+    }
+
+    final controller = _jogyMapController;
+    if (controller == null) return;
+
+    const targetZoom = 17.0;
+    final viewportSize = controller.cameraState.viewportSize;
+    final offset = _expandedBubbleCenterOffset(viewportSize);
+    final target = MapLatLng(post.location.latitude, post.location.longitude);
+    final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
+      target,
+      targetZoom,
+      offset.dx,
+      offset.dy,
+    );
+
+    await controller.moveTo(
+      adjustedCenter,
+      zoom: targetZoom,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    if (!mounted) return;
+    // 旧视口的 in-flight bounds fetch 可能刚好在发布和 moveTo 之间返回，并因
+    // scope 过滤把这个 pending post 暂时排除出 _posts。moveTo 完成后再 upsert
+    // 一次，确保接下来的聚合重算一定能看到刚发布的 post。
+    context.read<PostProvider>().addNewPost(post);
+    _clusterEngine.load(context.read<PostProvider>().posts);
+    await _recomputeClusters();
   }
 
   Widget _buildMenuItem({
@@ -707,9 +774,36 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     final isExpanded = _expandedIndex == index;
     final scaleFactor = _scaleFactors[index] ?? 1.0;
 
-    // Use highly accurate asynchronously pre-fetched native Mapbox screen point
-    final screenPoint = _postScreenPoints['p_${post.id}'];
+    // 优先用 async 预取的精确原生坐标（含 3D pitch / bearing 修正）。
+    // Cache miss 时回退到同步 Mercator 计算，确保气泡不会因为 async cache
+    // 还没填上就消失——这是修复"发布后看不到刚发的 post bubble"的关键。
+    //
+    // 已知 async cache miss 的高发场景：
+    //  1. addNewPost 触发 Consumer rebuild + postFrameCallback 重算，但
+    //     `_postScreenPoints.clear()` 与 _focusPublishedPost 的 setState 在
+    //     同一帧内连发，新 post 的 key 还没机会落进 cache；
+    //  2. moveTo 动画期间多次 _updatePostPositionsAsync 重入，`_isUpdatingPositions`
+    //     守卫导致部分调用被丢；
+    //  3. `getVisibleBounds()` 在动画 mid-flight 偶发 throw → cluster 重算静默失败。
+    //
+    // 同步 fallback 不依赖任何 async 链路，只要 controller 与 viewport 就绪
+    // 就一定返回非 null（精度足够首帧定位，下一次 async tick 自动 refine）。
+    final controller = _jogyMapController;
+    final asyncPoint = _postScreenPoints['p_${post.id}'];
+    final screenPoint =
+        asyncPoint ??
+        controller?.latLngToScreenPoint(
+          MapLatLng(post.location.latitude, post.location.longitude),
+        );
     if (screenPoint == null) return const SizedBox.shrink();
+    if (asyncPoint == null) {
+      // Cache miss → 走 sync fallback。打一行只在第一次出现新 id 时有意义的日志，
+      // 帮助验收时确认刚发布的 post 是不是命中了这条 fallback。
+      debugPrint(
+        '[MapPage] _buildBubbleOverlay sync-fallback id=${post.id} '
+        'pt=(${screenPoint.x.toStringAsFixed(1)},${screenPoint.y.toStringAsFixed(1)})',
+      );
+    }
 
     // Alignment: bottomCenter - 尖角在地理坐标位置
     const size = MapBubbleWidget.expandedHeight;
@@ -727,9 +821,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           if (isExpanded) {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (c) => DetailPage(postId: post.id),
-              ),
+              MaterialPageRoute(builder: (c) => DetailPage(postId: post.id)),
             );
           } else {
             // Manual expand - override auto
@@ -740,15 +832,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               _suppressedAutoIndex = null;
             });
             if (_jogyMapController != null) {
-              final viewportSize =
-                  _jogyMapController!.cameraState.viewportSize;
+              final viewportSize = _jogyMapController!.cameraState.viewportSize;
               final offset = _expandedBubbleCenterOffset(viewportSize);
               final target = MapLatLng(
                 post.location.latitude,
                 post.location.longitude,
               );
-              final adjustedCenter =
-                  MapGeoUtils.adjustCenterForScreenOffset(
+              final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
                 target,
                 16,
                 offset.dx,
@@ -773,7 +863,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
     // ClusterNode 分支
     final cluster = item as ClusterNode;
-    final screenPoint = _postScreenPoints[cluster.id];
+    // 同上：async cache miss 时退到同步 Mercator，避免 cluster 圆圈瞬时消失。
+    final controller = _jogyMapController;
+    final screenPoint =
+        _postScreenPoints[cluster.id] ??
+        controller?.latLngToScreenPoint(cluster.center);
     if (screenPoint == null) return const SizedBox.shrink();
 
     // Cluster 不展开，但 scale 仍随距离变化。用 cluster.id 作为 key 让手势期间
@@ -830,10 +924,19 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         // posts 为空时：可能是首次加载尚未完成，显示地图（不显示 "No posts found"）
         // 地图会在 posts 到达后通过 Consumer rebuild 自动显示气泡
 
-        // Posts 刷新后（坐标变化），重建聚合索引 + 重新计算屏幕坐标
+        // Posts 刷新后（数量 / 任一项的 id 或坐标变化），重建聚合索引 + 重新计算屏幕坐标。
+        //
+        // 之前的签名只看 posts.length 和 posts[0] 的坐标——同 length 但中间项变化、
+        // 或同 id 但坐标被远端纠正等 corner case 会漏 reload。改用全量 id+坐标的列表签名：
+        // posts 数量级 ~10²，每帧 join 成本可忽略，但能稳定捕捉所有数据变化。
         final postsSignature = posts.isEmpty
             ? ''
-            : '${posts.length}_${posts[0].location.latitude}_${posts[0].location.longitude}';
+            : posts
+                  .map(
+                    (p) =>
+                        '${p.id}:${p.location.latitude}:${p.location.longitude}',
+                  )
+                  .join('|');
         if (_lastPostsSignature != postsSignature) {
           _lastPostsSignature = postsSignature;
           // 先重建聚合索引（同步、O(n log n)，通常 <20ms）
@@ -849,17 +952,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         }
 
         // 聚合/单点混合渲染列表。展开态的单点排最后（渲染在最上）
-        final renderItems =
-            _clusterResults.isNotEmpty
-                ? List<ClusterOrPoint>.from(_clusterResults)
-                : posts.map<ClusterOrPoint>(SinglePoint.new).toList();
+        final renderItems = _clusterResults.isNotEmpty
+            ? List<ClusterOrPoint>.from(_clusterResults)
+            : posts.map<ClusterOrPoint>(SinglePoint.new).toList();
         if (_expandedIndex != null && _expandedIndex! < posts.length) {
           final expandedPostId = posts[_expandedIndex!].id;
           renderItems.sort((a, b) {
-            final aIsExpanded =
-                a is SinglePoint && a.post.id == expandedPostId;
-            final bIsExpanded =
-                b is SinglePoint && b.post.id == expandedPostId;
+            final aIsExpanded = a is SinglePoint && a.post.id == expandedPostId;
+            final bIsExpanded = b is SinglePoint && b.post.id == expandedPostId;
             if (aIsExpanded && !bIsExpanded) return 1;
             if (!aIsExpanded && bIsExpanded) return -1;
             return 0;
@@ -867,38 +967,42 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         }
 
         // 使用用户位置作为中心，如果获取失败则使用第一个 post 位置或 fallback
-        final mapCenter = _userLocation ??
+        final mapCenter =
+            _userLocation ??
             (posts.isNotEmpty
-                ? MapLatLng(posts[0].location.latitude, posts[0].location.longitude)
+                ? MapLatLng(
+                    posts[0].location.latitude,
+                    posts[0].location.longitude,
+                  )
                 : const MapLatLng(39.9042, 116.4074));
 
         return Stack(
           children: [
             // 基础地图 Widget（由 Mapbox 适配器构建）
-            MapboxMapWidgetBuilder(
-              styleUri: MapConfig.mapboxStyleUri,
-            ).build(JogyMapOptions(
-              initialCenter: mapCenter,
-              initialZoom: 17.0,
-              initialPitch: 45.0,
-              onMapCreated: (controller) {
-                setState(() {
-                  _jogyMapController = controller;
-                  _isViewportReady =
-                      controller.cameraState.viewportSize.x > 0 &&
-                      controller.cameraState.viewportSize.y > 0;
-                });
-                // 初次拉取到 posts 时已经 load，这里补一次以防 onMapCreated 晚于数据
-                if (posts.isNotEmpty) {
-                  _clusterEngine.load(posts);
-                }
-                // Initialize bubble positions + 首次聚合计算
-                _recomputeClusters();
-              },
-              onCameraMove: _onCameraMove,
-              onCameraIdle: _onCameraIdle,
-              onTap: _onMapTap,
-            )),
+            MapboxMapWidgetBuilder(styleUri: MapConfig.mapboxStyleUri).build(
+              JogyMapOptions(
+                initialCenter: mapCenter,
+                initialZoom: 17.0,
+                initialPitch: 45.0,
+                onMapCreated: (controller) {
+                  setState(() {
+                    _jogyMapController = controller;
+                    _isViewportReady =
+                        controller.cameraState.viewportSize.x > 0 &&
+                        controller.cameraState.viewportSize.y > 0;
+                  });
+                  // 初次拉取到 posts 时已经 load，这里补一次以防 onMapCreated 晚于数据
+                  if (posts.isNotEmpty) {
+                    _clusterEngine.load(posts);
+                  }
+                  // Initialize bubble positions + 首次聚合计算
+                  _recomputeClusters();
+                },
+                onCameraMove: _onCameraMove,
+                onCameraIdle: _onCameraIdle,
+                onTap: _onMapTap,
+              ),
+            ),
             // 标记覆盖层（仅在地图控制器就绪后渲染）
             // 用户位置由 Mapbox 原生 location puck 显示，无需 Flutter overlay
             if (_jogyMapController != null && _isViewportReady) ...[
@@ -1364,21 +1468,19 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
     // Validate
     final content = _contentController.text.trim();
     if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入内容')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入内容')));
       return;
     }
     if (_currentLocation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('正在获取位置，请稍候')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('正在获取位置，请稍候')));
       return;
     }
 
-    debugPrint(
-      '[_handlePublish] start, images=${_selectedPostImages.length}',
-    );
+    debugPrint('[_handlePublish] start, images=${_selectedPostImages.length}');
     setState(() => _isPublishing = true);
 
     try {
@@ -1422,27 +1524,12 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
 
       if (!mounted) return;
 
-      // 4. Add to PostProvider — 非关键路径，rebuild 失败不应影响发布成功反馈
-      try {
-        context.read<PostProvider>().addNewPost(newPost);
-      } catch (e, st) {
-        debugPrint('[_handlePublish] addNewPost failed: $e\n$st');
-      }
-
-      // 5. 关闭发布 sheet，清掉可能排队中的旧 SnackBar（"请输入内容"/"正在获取位置"），
-      //    然后在屏幕正中央短暂展示成功 toast（OverlayEntry，不依赖 sheet 上下文）。
-      final messenger = ScaffoldMessenger.of(context);
-      Navigator.pop(context);
-
-      // 复位发布状态（下次再打开 sheet 按钮是干净状态，而非残留 spinner）
-      if (mounted) {
-        setState(() => _isPublishing = false);
-      }
-
-      messenger.hideCurrentSnackBar();
-      if (mounted) {
-        showCenterToast(context, message: '发布成功');
-      }
+      // 4. 关闭发布 sheet，并把新 post 返回给 MapPage。
+      //
+      // PostProvider 写入、toast、地图 moveTo 都由父级 MapPage 处理。这样可以保证
+      // 使用的是地图所在页面的 context / controller，避免 bottom sheet 内部更新后
+      // 地图视口仍停留在别处而看不到刚发布的 post。
+      Navigator.pop(context, newPost);
       debugPrint('[_handlePublish] done');
     } catch (e, st) {
       debugPrint('[_handlePublish] FAILED: $e\n$st');
@@ -1450,9 +1537,9 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
       setState(() => _isPublishing = false);
 
       final msg = e.toString().replaceFirst('Exception: ', '');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('发布失败：$msg')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('发布失败：$msg')));
     }
   }
 
@@ -1471,9 +1558,7 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
           if (draft['image_paths'] != null) {
             try {
               List<dynamic> paths = jsonDecode(draft['image_paths']);
-              _selectedPostImages.addAll(
-                paths.map((e) => File(e.toString())),
-              );
+              _selectedPostImages.addAll(paths.map((e) => File(e.toString())));
             } catch (e) {
               debugPrint('Error parsing draft images: $e');
             }
@@ -1486,8 +1571,7 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
           }
 
           // Restore location
-          if (draft['location_lat'] != null &&
-              draft['location_lng'] != null) {
+          if (draft['location_lat'] != null && draft['location_lng'] != null) {
             _currentLocation = LocationModel(
               latitude: draft['location_lat'],
               longitude: draft['location_lng'],
