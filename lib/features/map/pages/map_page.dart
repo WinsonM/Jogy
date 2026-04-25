@@ -5,7 +5,6 @@ import '../../../../core/database/database_helper.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -33,6 +32,7 @@ import '../../profile/services/browsing_history_service.dart';
 import 'location_picker_page.dart';
 import '../../../data/models/location_model.dart';
 import '../../../widgets/center_toast.dart';
+import '../../../widgets/wheel_popover.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -1219,7 +1219,7 @@ class _MessageSheetContent extends StatefulWidget {
 class _MessageSheetContentState extends State<_MessageSheetContent> {
   bool _isImageMode = true; // true = 图片模式, false = 文字模式
   String _selectedDuration = '永久'; // 留存时长
-  bool _showPickerWheel = false; // 是否显示滚轮选择器
+  final GlobalKey _durationChipKey = GlobalKey(); // popover anchor
 
   // Post publish state
   final List<File> _selectedPostImages = [];
@@ -1869,9 +1869,18 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
                     // Glass bubble label - tappable
                     GestureDetector(
                       onTap: () {
-                        setState(() => _showPickerWheel = !_showPickerWheel);
+                        showWheelPopover(
+                          context: context,
+                          anchorKey: _durationChipKey,
+                          options: _durationOptions,
+                          selected: _selectedDuration,
+                          onChanged: (value) {
+                            setState(() => _selectedDuration = value);
+                          },
+                        );
                       },
                       child: ClipRRect(
+                        key: _durationChipKey,
                         borderRadius: BorderRadius.circular(20),
                         child: BackdropFilter(
                           filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -1911,82 +1920,16 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
                                   ),
                                 ),
                                 const SizedBox(width: 4),
-                                AnimatedRotation(
-                                  duration: const Duration(milliseconds: 200),
-                                  turns: _showPickerWheel ? 0.5 : 0,
-                                  child: Icon(
-                                    Icons.keyboard_arrow_down,
-                                    size: 18,
-                                    color: Colors.grey[600],
-                                  ),
+                                Icon(
+                                  Icons.keyboard_arrow_down,
+                                  size: 18,
+                                  color: Colors.grey[600],
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    // Animated wheel picker
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                      child: _showPickerWheel
-                          ? Column(
-                              children: [
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  height: 120,
-                                  child: CupertinoPicker(
-                                    scrollController:
-                                        FixedExtentScrollController(
-                                          initialItem: _durationOptions.indexOf(
-                                            _selectedDuration,
-                                          ),
-                                        ),
-                                    itemExtent: 36,
-                                    onSelectedItemChanged: (index) {
-                                      setState(
-                                        () => _selectedDuration =
-                                            _durationOptions[index],
-                                      );
-                                    },
-                                    children: _durationOptions.map((option) {
-                                      return Center(
-                                        child: Text(
-                                          option,
-                                          style: const TextStyle(fontSize: 16),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                // Confirm button
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() => _showPickerWheel = false);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF3FAAF0),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: const Text(
-                                      '确定',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
                     ),
                   ],
                 ],
