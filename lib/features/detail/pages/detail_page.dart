@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/services/auth_service.dart';
+import '../../../data/datasources/remote_data_source.dart';
 import '../../../data/models/post_model.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../profile/profile_navigation.dart';
+import '../widgets/edit_post_sheet.dart';
+import 'image_viewer_page.dart';
 
 class DetailPage extends StatefulWidget {
   final String? postId;
@@ -76,44 +80,187 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          '详情',
-          style: TextStyle(color: Colors.black, fontSize: 18),
-        ),
-        centerTitle: true,
+  /// 当前 post 是否属于本机登录用户。
+  ///
+  /// 用 read（非 watch）—— AuthService 在登录态变更时一般会触发整页重建，
+  /// 这里再 listen 一次只是徒增开销。
+  bool _isOwnPost(PostModel post) {
+    final me = context.read<AuthService>().currentUser;
+    return me != null && me.id == post.user.id;
+  }
+
+  Future<void> _confirmDelete(PostModel post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认删除'),
+        content: const Text('删除后将无法恢复，确定要删除这条内容吗？'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined, color: Colors.black),
-            onPressed: () => _showShareSheet(context),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
           ),
         ],
       ),
-      body: Consumer<PostProvider>(
-        builder: (context, postProvider, child) {
-          // Get the post - either by ID or use the first post as demo
-          final PostModel? post = widget.postId != null
-              ? postProvider.posts.cast<PostModel?>().firstWhere(
-                  (p) => p?.id == widget.postId,
-                  orElse: () => null,
-                )
-              : (postProvider.posts.isNotEmpty ? postProvider.posts[0] : null);
+    );
+    if (confirmed != true) return;
 
-          if (post == null) {
-            return const Center(child: Text('Post not found'));
-          }
+    try {
+      await RemoteDataSource().deletePost(post.id);
+      if (!mounted) return;
+      context.read<PostProvider>().removePost(post.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已删除'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      Navigator.pop(context); // 关闭详情页
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '删除失败：${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    }
+  }
 
-          return Column(
+  Future<void> _openEditSheet(PostModel post) async {
+    final updated = await showEditPostSheet(context, post: post);
+    if (updated == null || !mounted) return;
+    context.read<PostProvider>().updatePost(updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已保存'), duration: Duration(seconds: 2)),
+    );
+  }
+
+  void _openImageViewer(List<String> imageUrls, int initialIndex) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImageViewerPage(
+          imageUrls: imageUrls,
+          initialIndex: initialIndex,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<PostProvider>(
+      builder: (context, postProvider, child) {
+        // Get the post - either by ID or use the first post as demo
+        final PostModel? post = widget.postId != null
+            ? postProvider.posts.cast<PostModel?>().firstWhere(
+                (p) => p?.id == widget.postId,
+                orElse: () => null,
+              )
+            : (postProvider.posts.isNotEmpty ? postProvider.posts[0] : null);
+
+        if (post == null) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              backgroundColor: Colors.white,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.black),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: const Text(
+                '详情',
+                style: TextStyle(color: Colors.black, fontSize: 18),
+              ),
+              centerTitle: true,
+            ),
+            body: const Center(child: Text('Post not found')),
+          );
+        }
+
+        final isOwn = _isOwnPost(post);
+
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: const Text(
+              '详情',
+              style: TextStyle(color: Colors.black, fontSize: 18),
+            ),
+            centerTitle: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.share_outlined, color: Colors.black),
+                onPressed: () => _showShareSheet(context),
+              ),
+              // 仅自己的 post 显示 "..." 菜单（编辑 / 删除）
+              if (isOwn)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz, color: Colors.black),
+                  tooltip: '更多',
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _openEditSheet(post);
+                    } else if (value == 'delete') {
+                      _confirmDelete(post);
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('编辑'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: Colors.red,
+                          ),
+                          SizedBox(width: 8),
+                          Text('删除', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          body: _buildBody(context, post, postProvider, isOwn),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    PostModel post,
+    PostProvider postProvider,
+    bool isOwn,
+  ) {
+    return Column(
             children: [
               Expanded(
                 child: SingleChildScrollView(
@@ -135,20 +282,31 @@ class _DetailPageState extends State<DetailPage> {
                                   });
                                 },
                                 itemBuilder: (context, index) {
-                                  return Image.network(
-                                    post.imageUrls[index],
-                                    width: double.infinity,
-                                    height: 300,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        height: 300,
-                                        color: Colors.grey[300],
-                                        child: const Center(
-                                          child: Icon(Icons.error),
-                                        ),
-                                      );
-                                    },
+                                  // 单击图片 → 全屏多图查看器（ImageViewerPage）。
+                                  // behavior: opaque 让 GestureDetector 即使
+                                  // 在 transparent 区域也吃到 tap。
+                                  return GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _openImageViewer(
+                                      post.imageUrls,
+                                      index,
+                                    ),
+                                    child: Image.network(
+                                      post.imageUrls[index],
+                                      width: double.infinity,
+                                      height: 300,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return Container(
+                                          height: 300,
+                                          color: Colors.grey[300],
+                                          child: const Center(
+                                            child: Icon(Icons.error),
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   );
                                 },
                               ),
@@ -256,10 +414,12 @@ class _DetailPageState extends State<DetailPage> {
                                     ),
                                   ),
                                 ),
-                                // Follow and Message buttons
-                                _buildFollowButton(),
-                                const SizedBox(width: 8),
-                                _buildMessageButton(),
+                                // 自己的 post 不显示"关注 / 私信" —— 没意义。
+                                if (!isOwn) ...[
+                                  _buildFollowButton(),
+                                  const SizedBox(width: 8),
+                                  _buildMessageButton(),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -339,9 +499,6 @@ class _DetailPageState extends State<DetailPage> {
               _buildBottomBar(context, post, postProvider),
             ],
           );
-        },
-      ),
-    );
   }
 
   Widget _buildCommentItem(

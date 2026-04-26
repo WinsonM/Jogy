@@ -164,6 +164,41 @@ class PostProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Remove a post by id (call after successful DELETE on backend).
+  /// Also clears any pending local-only copy so it won't be re-added by
+  /// [_mergeLocalAdditions] on the next fetch.
+  void removePost(String postId) {
+    final before = _posts.length;
+    _posts.removeWhere((p) => p.id == postId);
+    _localAdditions.remove(postId);
+    debugPrint(
+      '[PostProvider] removePost id=$postId removed=${before - _posts.length}',
+    );
+    notifyListeners();
+  }
+
+  /// Replace an existing post in-place by id (call after successful PATCH).
+  /// Preserves list order — important for the home map renderer that uses
+  /// posts[0] as a stable anchor.
+  void updatePost(PostModel updated) {
+    final i = _posts.indexWhere((p) => p.id == updated.id);
+    if (i == -1) {
+      // Post 不在当前列表（可能被 fetchPostsByBounds 移出视口）。仅当本地
+      // pending 池里有时同步刷新；否则忽略 — 下次 fetch 自然带回。
+      if (_localAdditions.containsKey(updated.id)) {
+        _localAdditions[updated.id] = _LocalPostEntry(updated, DateTime.now());
+        notifyListeners();
+      }
+      return;
+    }
+    _posts[i] = updated;
+    if (_localAdditions.containsKey(updated.id)) {
+      _localAdditions[updated.id] = _LocalPostEntry(updated, DateTime.now());
+    }
+    debugPrint('[PostProvider] updatePost id=${updated.id} idx=$i');
+    notifyListeners();
+  }
+
   // ── Local-additions merge ───────────────────────────────────────────
   //
   // 解决"刚 addNewPost 的 post 在下一次 fetchPostsByBounds 全量覆写时被抹掉"

@@ -320,6 +320,41 @@ class RemoteDataSource {
     }
   }
 
+  /// Partial update an existing post (author only).
+  ///
+  /// 后端 `PATCH /posts/{id}` 仅接受 content_text / title / address_name /
+  /// expire_at；location / 媒体 / post_type 不可改（语义上属于"重新发布"）。
+  ///
+  /// `expireAt` 传 ISO8601 字符串；想从短时长改为永久暂时不支持（PATCH 无法
+  /// 区分"未提供"与"显式置 null"），未来如需要可加专门的 reset 端点。
+  Future<PostModel> updatePost(
+    String postId, {
+    String? title,
+    String? contentText,
+    String? addressName,
+    String? expireAt,
+  }) async {
+    final data = <String, dynamic>{};
+    if (title != null) data['title'] = title;
+    if (contentText != null) data['content_text'] = contentText;
+    if (addressName != null) data['address_name'] = addressName;
+    if (expireAt != null) data['expire_at'] = expireAt;
+
+    Response response;
+    try {
+      response = await _dio.patch(ApiConstants.postById(postId), data: data);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to update post');
+    }
+    try {
+      return PostModel.fromJson(response.data as Map<String, dynamic>);
+    } catch (e, st) {
+      debugPrint('[updatePost] parse failed: $e\n$st');
+      debugPrint('[updatePost] raw=${response.data}');
+      throw Exception('Failed to parse server response: $e');
+    }
+  }
+
   // ==================== Discover ====================
 
   /// Fetch posts for discover (viewport-based)
