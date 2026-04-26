@@ -73,8 +73,49 @@ class MapboxMapController implements JogyMapController {
       } else {
         await _mapboxMap.setCamera(cameraOptions);
       }
+      await _syncCachedCameraState(
+        fallbackCenter: center,
+        fallbackZoom: zoom,
+        fallbackPitch: pitch,
+        fallbackBearing: bearing,
+      );
     } finally {
       _isAnimating = false;
+    }
+  }
+
+  Future<void> _syncCachedCameraState({
+    required MapLatLng fallbackCenter,
+    double? fallbackZoom,
+    double? fallbackPitch,
+    double? fallbackBearing,
+  }) async {
+    try {
+      final cameraState = await _mapboxMap.getCameraState();
+      final nativeSize = await _mapboxMap.getSize();
+      final currentViewport = _lastCameraState.viewportSize;
+      final width = nativeSize.width.toDouble() > 0
+          ? nativeSize.width.toDouble()
+          : currentViewport.x;
+      final height = nativeSize.height.toDouble() > 0
+          ? nativeSize.height.toDouble()
+          : currentViewport.y;
+      final center = cameraState.center.coordinates;
+      _lastCameraState = MapCameraState(
+        center: MapLatLng(center.lat.toDouble(), center.lng.toDouble()),
+        zoom: cameraState.zoom,
+        pitch: cameraState.pitch,
+        bearing: cameraState.bearing,
+        viewportSize: MapScreenPoint(width, height),
+      );
+    } catch (_) {
+      _lastCameraState = MapCameraState(
+        center: fallbackCenter,
+        zoom: fallbackZoom ?? _lastCameraState.zoom,
+        pitch: fallbackPitch ?? _lastCameraState.pitch,
+        bearing: fallbackBearing ?? _lastCameraState.bearing,
+        viewportSize: _lastCameraState.viewportSize,
+      );
     }
   }
 
@@ -242,7 +283,10 @@ class MapboxMapController implements JogyMapController {
   static _MercatorPoint _latLngToMercator(MapLatLng latLng, double scale) {
     final x = (latLng.longitude + 180.0) / 360.0 * scale;
     final latRad = latLng.latitude * math.pi / 180.0;
-    final y = (1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) / 2.0 * scale;
+    final y =
+        (1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) /
+        2.0 *
+        scale;
     return _MercatorPoint(x, y);
   }
 }

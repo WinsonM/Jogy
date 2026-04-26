@@ -87,9 +87,9 @@ class MapBounds {
   double get maxLongitude => northeast.longitude;
 
   MapLatLng get center => MapLatLng(
-        (southwest.latitude + northeast.latitude) / 2,
-        (southwest.longitude + northeast.longitude) / 2,
-      );
+    (southwest.latitude + northeast.latitude) / 2,
+    (southwest.longitude + northeast.longitude) / 2,
+  );
 
   @override
   String toString() => 'MapBounds(sw: $southwest, ne: $northeast)';
@@ -113,13 +113,15 @@ class MapGeoUtils {
     double offsetX,
     double offsetY,
   ) {
-    final scale = 256.0 * math.pow(2, zoom);
+    // Keep this consistent with MapboxMapController.latLngToScreenPoint and
+    // pixelDistanceToDegrees. Mapbox uses 512 px at zoom 0.
+    final scale = 512.0 * math.pow(2, zoom);
 
     // 目标点的 Mercator 像素坐标
     final tx = (target.longitude + 180.0) / 360.0 * scale;
     final latRad = target.latitude * math.pi / 180.0;
-    final ty = (1.0 -
-            math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) /
+    final ty =
+        (1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) /
         2.0 *
         scale;
 

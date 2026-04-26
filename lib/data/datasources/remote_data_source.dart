@@ -332,6 +332,10 @@ class RemoteDataSource {
     int offset = 0,
   }) async {
     try {
+      debugPrint(
+        '[Discover] GET bounds=[$minLatitude..$maxLatitude, '
+        '$minLongitude..$maxLongitude] limit=$limit offset=$offset',
+      );
       final response = await _dio.get(
         ApiConstants.discover,
         queryParameters: {
@@ -343,8 +347,30 @@ class RemoteDataSource {
           'offset': offset,
         },
       );
-      return response.data as Map<String, dynamic>;
+      final data = response.data as Map<String, dynamic>;
+      final postsRaw = (data['posts'] as List?) ?? const [];
+      final total = data['total'];
+      final hasMore = data['hasMore'];
+      // 抽样前 3 条的 id + 坐标 + expire_at，方便把"接口返回了什么"和"地图上看不到"对齐
+      final sample = postsRaw
+          .take(3)
+          .map((p) {
+            if (p is! Map) return '<bad>';
+            final loc = (p['location'] as Map?) ?? const {};
+            return '${p['id']}@(${loc['latitude']},${loc['longitude']})'
+                ' expire=${p['expireAt'] ?? p['expire_at']}';
+          })
+          .join(' | ');
+      debugPrint(
+        '[Discover] OK total=$total hasMore=$hasMore '
+        'returned=${postsRaw.length} sample=[$sample]',
+      );
+      return data;
     } on DioException catch (e) {
+      debugPrint(
+        '[Discover] FAILED status=${e.response?.statusCode} '
+        'msg=${e.message} body=${e.response?.data}',
+      );
       throw _handleDioError(e, 'Failed to load discover posts');
     }
   }
@@ -657,10 +683,7 @@ class RemoteDataSource {
   /// Add to browsing history
   Future<void> addHistory(String postId) async {
     try {
-      await _dio.post(
-        ApiConstants.userMeHistory,
-        data: {'post_id': postId},
-      );
+      await _dio.post(ApiConstants.userMeHistory, data: {'post_id': postId});
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to add history');
     }
@@ -737,10 +760,7 @@ class RemoteDataSource {
       final formData = FormData.fromMap({
         'file': await MultipartFile.fromFile(filePath),
       });
-      final response = await _dio.post(
-        ApiConstants.uploadFile,
-        data: formData,
-      );
+      final response = await _dio.post(ApiConstants.uploadFile, data: formData);
       return (response.data as Map<String, dynamic>)['url'] as String;
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to upload file');

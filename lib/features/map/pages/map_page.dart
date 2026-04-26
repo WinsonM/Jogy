@@ -16,6 +16,7 @@ import '../../../core/map/map_controller.dart';
 import '../../../core/map/map_widget_builder.dart';
 import '../../../core/map/mapbox/mapbox_map_widget_builder.dart';
 import '../widgets/map_bubble.dart';
+import '../widgets/post_bubbles_overlay.dart';
 import '../widgets/zoom_arc_control.dart';
 import '../clustering/cluster_engine.dart';
 import '../clustering/cluster_models.dart';
@@ -76,6 +77,21 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   /// 首次 `_recomputeClusters` 后替换为真实结果。
   List<ClusterOrPoint> _clusterResults = const [];
 
+  /// 最近发布的 post 的强制 pin。
+  ///
+  /// 渲染时即使 [_clusterResults] 没包含它（discover 还没返回 / supercluster 边界
+  /// 没覆盖 / 评分 / 过期 filter 等任意一环吞掉），也会在 build 末尾强制 append
+  /// 一个 `SinglePoint(_pinnedPost!)` 到 renderItems。
+  ///
+  /// 自动清空时机（同一次 setState 里）：
+  ///  - [_recomputeClusters] 的最新结果包含这条 post id（远端数据生效，pin 不再必要）；
+  ///  - 已超过 [_pinnedPostTtl]（防止 post 被删/审核拒/永远不再返回时变成会话内幽灵）。
+  PostModel? _pinnedPost;
+  DateTime? _pinnedPostAt;
+
+  /// pinned post 的最长保留时长。与 `PostProvider._localAdditionTtl` 对齐。
+  static const Duration _pinnedPostTtl = Duration(minutes: 2);
+
   // 用户位置相关
   MapLatLng? _userLocation;
   bool _locationLoading = true;
@@ -89,6 +105,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   // 滑动防抖计时器，用于在用户停止滑动后刷新 posts
   Timer? _cameraMoveDebounce;
 
+  /// 相机变化滴答。每次 [_onCameraMove] 触发时 +1，[PostBubblesOverlay] 监听
+  /// 它来重算所有 post 的同步屏幕坐标。
+  ///
+  /// 用 [ValueNotifier] 而非直接 setState：避免每次相机移动都让整个 MapPage
+  /// build 重跑（地图 widget / 工具栏 / 头像等都会重建一次），只让 overlay
+  /// 这一层 setState。
+  final ValueNotifier<int> _cameraTick = ValueNotifier(0);
+
   final GlobalKey _addButtonKey = GlobalKey();
 
   @override
@@ -100,6 +124,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   @override
   void dispose() {
     _cameraMoveDebounce?.cancel();
+    _cameraTick.dispose();
     super.dispose();
   }
 
@@ -108,7 +133,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         _showLocationPermissionDialog('定位服务未开启，请在系统设置中开启定位服务。');
-        _useFallbackLocation();
+        await _useFallbackLocation();
         return;
       }
 
@@ -117,14 +142,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           _showLocationPermissionDialog('需要定位权限才能显示您附近的内容。请允许 Jogy 访问您的位置。');
-          _useFallbackLocation();
+          await _useFallbackLocation();
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
         _showLocationPermissionDialog('定位权限已被永久拒绝，请前往系统设置手动开启。');
-        _useFallbackLocation();
+        await _useFallbackLocation();
         return;
       }
 
@@ -148,24 +173,40 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         );
       }
     } catch (e) {
-      print('获取位置失败: $e');
-      _useFallbackLocation();
+      debugPrint('获取位置失败: $e');
+      await _useFallbackLocation();
     }
   }
 
-  /// GPS 不可用时，使用默认位置
-  void _useFallbackLocation() {
+  /// GPS 不可用时，优先使用系统缓存位置；没有缓存再使用默认位置。
+  Future<void> _useFallbackLocation() async {
     const defaultLat = 39.9042;
     const defaultLng = 116.4074;
+    Position? lastKnown;
+    try {
+      lastKnown = await Geolocator.getLastKnownPosition();
+    } catch (_) {
+      // Permission/service failures fall back to the static default below.
+    }
+    if (!mounted) return;
+
+    final latitude = lastKnown?.latitude ?? defaultLat;
+    final longitude = lastKnown?.longitude ?? defaultLng;
+    debugPrint(
+      '[MapPage] using fallback location '
+      'source=${lastKnown == null ? "default" : "last-known"} '
+      'lat=$latitude lng=$longitude',
+    );
+
     setState(() {
-      _userLocation = MapLatLng(defaultLat, defaultLng);
+      _userLocation = MapLatLng(latitude, longitude);
       _locationLoading = false;
     });
     if (mounted) {
       Provider.of<PostProvider>(
         context,
         listen: false,
-      ).fetchPostsByLocation(latitude: defaultLat, longitude: defaultLng);
+      ).fetchPostsByLocation(latitude: latitude, longitude: longitude);
     }
   }
 
@@ -574,6 +615,12 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     _cameraMoveDebounce = null;
 
     context.read<PostProvider>().addNewPost(newPost);
+    // Pin 这条 post：build 时即使 _clusterResults / supercluster / 过期 filter 都
+    // 没包含它，也强制注入一个 SinglePoint(pinned)；详见 _pinnedPost 文档。
+    setState(() {
+      _pinnedPost = newPost;
+      _pinnedPostAt = DateTime.now();
+    });
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     showCenterToast(context, message: '发布成功');
 
@@ -616,6 +663,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       zoom: targetZoom,
       duration: const Duration(milliseconds: 500),
     );
+    if (mounted) {
+      _cameraTick.value++;
+    }
 
     if (!mounted) return;
     // 旧视口的 in-flight bounds fetch 可能刚好在发布和 moveTo 之间返回，并因
@@ -654,6 +704,50 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     );
   }
 
+  /// 处理气泡点击：collapsed → 展开 + 移动相机；expanded → 进详情页。
+  /// 抽出来给 [PostBubblesOverlay] 复用，不再依赖 _buildBubbleOverlay 内部闭包。
+  void _handleBubbleTap(PostModel post, int index) {
+    final isExpanded = _expandedIndex == index;
+    if (isExpanded) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (c) => DetailPage(postId: post.id)),
+      );
+      return;
+    }
+
+    BrowsingHistoryService().addToHistory(post);
+    setState(() {
+      _manualExpandedIndex = index;
+      _expandedIndex = index;
+      _suppressedAutoIndex = null;
+    });
+    final controller = _jogyMapController;
+    if (controller != null) {
+      final viewportSize = controller.cameraState.viewportSize;
+      final offset = _expandedBubbleCenterOffset(viewportSize);
+      final target = MapLatLng(post.location.latitude, post.location.longitude);
+      final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
+        target,
+        16,
+        offset.dx,
+        offset.dy,
+      );
+      unawaited(
+        controller
+            .moveTo(adjustedCenter, zoom: 16)
+            .then((_) {
+              if (mounted) {
+                _cameraTick.value++;
+              }
+            })
+            .catchError((Object e, StackTrace st) {
+              debugPrint('[MapPage] bubble moveTo failed: $e\n$st');
+            }),
+      );
+    }
+  }
+
   // 地图相机移动回调
   void _onCameraMove(MapCameraEvent event) {
     if (!_isViewportReady &&
@@ -683,6 +777,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
     // Update marker positions using the precise async coordinates approach
     _updatePostPositionsAsync();
+
+    // Notify PostBubblesOverlay 重算同步屏幕坐标。比 setState 这层 MapPage 更
+    // 轻量 —— 只让 overlay 这一层 build。
+    _cameraTick.value++;
 
     // 用户手势滑动时，防抖 500ms 后根据新视口刷新 posts
     if (event.source == MapMoveSource.gesture) {
@@ -728,14 +826,51 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       ),
     );
 
+    final zoom = controller.cameraState.zoom;
     final results = _clusterEngine.getClusters(
       bounds: paddedBounds,
-      zoom: controller.cameraState.zoom,
+      zoom: zoom,
     );
 
     if (!mounted) return;
+    final providerCount = Provider.of<PostProvider>(
+      context,
+      listen: false,
+    ).posts.length;
+    debugPrint(
+      '[MapPage] _recomputeClusters zoom=${zoom.toStringAsFixed(1)} '
+      'bounds=[${bounds.minLatitude.toStringAsFixed(4)}..'
+      '${bounds.maxLatitude.toStringAsFixed(4)}, '
+      '${bounds.minLongitude.toStringAsFixed(4)}..'
+      '${bounds.maxLongitude.toStringAsFixed(4)}] '
+      '_posts=$providerCount cluster_results=${results.length}',
+    );
+
+    // pinned post self-clear：consumed = 远端聚合结果已包含该 id（远端权威，
+    // 不再需要 pin）；expired = 超过 TTL（避免幽灵）。两条满足任一则清。
+    // 与 _clusterResults 更新放进同一个 setState，避免中间帧"既无 pin 又无
+    // cluster 包含"的空窗。
+    final pinned = _pinnedPost;
+    final pinnedAt = _pinnedPostAt;
+    final consumed =
+        pinned != null &&
+        results.any((r) => r is SinglePoint && r.post.id == pinned.id);
+    final expired =
+        pinnedAt != null &&
+        DateTime.now().difference(pinnedAt) > _pinnedPostTtl;
+
     setState(() {
       _clusterResults = results;
+      if (consumed || expired) {
+        if (pinned != null) {
+          debugPrint(
+            '[MapPage] pinned-clear id=${pinned.id} '
+            'reason=${consumed ? "cluster-included" : "ttl-expired"}',
+          );
+        }
+        _pinnedPost = null;
+        _pinnedPostAt = null;
+      }
     });
     // 聚合结果变化后重算屏幕坐标
     _updatePostPositionsAsync();
@@ -852,7 +987,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     );
   }
 
-  /// 构建聚合/单点覆盖层（cluster-aware）
+  /// 构建聚合/单点覆盖层（cluster-aware）。
+  ///
+  /// **DEAD CODE**：build 已改用 [PostBubblesOverlay]，该方法不再被调用。
+  /// 暂留以避免删除时连带触发 `_pinnedPost` / `_clusterResults` /
+  /// `_postScreenPoints` / `_lastPostsSignature` 等一连串 unused 警告 —— 它们
+  /// 还有其它写入点，需要更大范围的 cleanup PR。本次只做最小改动让 bubble 出来。
+  // ignore: unused_element
   Widget _buildItemOverlay(ClusterOrPoint item, List<PostModel> posts) {
     if (item is SinglePoint) {
       // 找到 item.post 在 posts 列表中的 index，沿用原有的自动展开/scale 体系
@@ -955,6 +1096,20 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         final renderItems = _clusterResults.isNotEmpty
             ? List<ClusterOrPoint>.from(_clusterResults)
             : posts.map<ClusterOrPoint>(SinglePoint.new).toList();
+
+        // 强制 pin 兜底：刚发布的 post 即使被 cluster_results / supercluster /
+        // 过期 filter / discover 评分等任一环节吞掉，也保证它在屏幕上一定出现。
+        // 详见 [_pinnedPost] 文档；self-clear 在 [_recomputeClusters]。
+        final pinned = _pinnedPost;
+        if (pinned != null) {
+          final already = renderItems.any(
+            (it) => it is SinglePoint && it.post.id == pinned.id,
+          );
+          if (!already) {
+            renderItems.add(SinglePoint(pinned));
+            debugPrint('[MapPage] pinned-overlay injecting id=${pinned.id}');
+          }
+        }
         if (_expandedIndex != null && _expandedIndex! < posts.length) {
           final expandedPostId = posts[_expandedIndex!].id;
           renderItems.sort((a, b) {
@@ -985,6 +1140,12 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 initialZoom: 17.0,
                 initialPitch: 45.0,
                 onMapCreated: (controller) {
+                  final viewport = controller.cameraState.viewportSize;
+                  debugPrint(
+                    '[MapPage] onMapCreated posts=${posts.length} '
+                    'viewport=${viewport.x.toStringAsFixed(0)}x'
+                    '${viewport.y.toStringAsFixed(0)}',
+                  );
                   setState(() {
                     _jogyMapController = controller;
                     _isViewportReady =
@@ -1003,12 +1164,25 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 onTap: _onMapTap,
               ),
             ),
-            // 标记覆盖层（仅在地图控制器就绪后渲染）
-            // 用户位置由 Mapbox 原生 location puck 显示，无需 Flutter overlay
-            if (_jogyMapController != null && _isViewportReady) ...[
-              // Posts / Cluster 气泡标记
-              ...renderItems.map((item) => _buildItemOverlay(item, posts)),
-            ],
+            // 标记覆盖层。新版用 [PostBubblesOverlay]：
+            //  - 不依赖 _isViewportReady gate（视口未就绪时该条静默 skip，下个 tick 自动补上）；
+            //  - 不依赖 _clusterResults / _postScreenPoints 异步 cache；
+            //  - 每次 _onCameraMove → _cameraTick.value++ 触发 overlay 内部 setState。
+            //
+            // 旧的 renderItems / _buildItemOverlay / _pinnedPost / cluster engine
+            // 路径暂时保留为 dead state（cleanup 留到后续 PR），避免一次性删动
+            // 太多关联点（_clusterResults、_pinnedPost、_postScreenPoints、
+            // _lastPostsSignature 等）。
+            if (_jogyMapController != null)
+              PostBubblesOverlay(
+                controller: _jogyMapController!,
+                cameraTick: _cameraTick,
+                posts: posts,
+                mapRotation: _mapRotation,
+                expandedIndex: _expandedIndex,
+                scaleFactors: _scaleFactors,
+                onTap: _handleBubbleTap,
+              ),
             // 顶部工具栏：搜索框 + 消息按钮 + 发布按钮
             Positioned(
               top: MediaQuery.of(context).padding.top + 12,

@@ -17,6 +17,13 @@ class PostModel {
   final List<CommentModel> comments;
   final DateTime createdAt;
 
+  /// 过期时间（UTC ISO8601）。null = 永久。
+  ///
+  /// 用于 profile UI 区分"活跃 / 已过期"——后端 `/users/{id}/posts` 不 filter，
+  /// 但 `/posts/discover` 会 `expire_at IS NULL OR expire_at > now()` 卡掉过期，
+  /// 导致 profile 看得到、map 看不到。前端用 [expireAt] 显式标记。
+  final DateTime? expireAt;
+
   const PostModel({
     required this.id,
     required this.user,
@@ -29,6 +36,7 @@ class PostModel {
     this.isFavorited = false,
     this.comments = const [],
     required this.createdAt,
+    this.expireAt,
   });
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
@@ -51,6 +59,13 @@ class PostModel {
       createdAt = DateTime.tryParse(rawCreatedAt) ?? DateTime.now();
     } else {
       createdAt = DateTime.now();
+    }
+
+    // Safe expireAt parse — null 表示永久
+    DateTime? expireAt;
+    final rawExpireAt = json['expireAt'];
+    if (rawExpireAt is String) {
+      expireAt = DateTime.tryParse(rawExpireAt);
     }
 
     return PostModel(
@@ -81,6 +96,7 @@ class PostModel {
               .toList() ??
           [],
       createdAt: createdAt,
+      expireAt: expireAt,
     );
   }
 
@@ -97,6 +113,7 @@ class PostModel {
       'isFavorited': isFavorited,
       'comments': comments.map((e) => e.toJson()).toList(),
       'createdAt': createdAt.toIso8601String(),
+      'expireAt': expireAt?.toIso8601String(),
     };
   }
 
@@ -112,6 +129,7 @@ class PostModel {
     bool? isFavorited,
     List<CommentModel>? comments,
     DateTime? createdAt,
+    DateTime? expireAt,
   }) {
     return PostModel(
       id: id ?? this.id,
@@ -125,6 +143,7 @@ class PostModel {
       isFavorited: isFavorited ?? this.isFavorited,
       comments: comments ?? this.comments,
       createdAt: createdAt ?? this.createdAt,
+      expireAt: expireAt ?? this.expireAt,
     );
   }
 }

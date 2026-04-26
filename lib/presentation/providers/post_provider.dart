@@ -84,10 +84,15 @@ class PostProvider extends ChangeNotifier {
           return dKm <= radiusInKm;
         },
       );
+      debugPrint(
+        '[PostProvider] fetchPostsByLocation lat=$latitude lng=$longitude '
+        'r=${radiusInKm}km remote=${remote.length} _posts=${_posts.length}',
+      );
 
       _isLoading = false;
       notifyListeners();
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[PostProvider] fetchPostsByLocation FAILED: $e\n$st');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -126,10 +131,15 @@ class PostProvider extends ChangeNotifier {
               lng <= maxLongitude + pad;
         },
       );
+      debugPrint(
+        '[PostProvider] fetchPostsByBounds remote=${newPosts.length} '
+        'localPool=${_localAdditions.length} _posts=${_posts.length}',
+      );
       _isLoading = false;
       notifyListeners();
-    } catch (e) {
-      // 静默失败，保留当前 posts
+    } catch (e, st) {
+      // 之前是完全静默失败，导致 discover 出 5xx 时前端整页空白且无任何提示。
+      debugPrint('[PostProvider] fetchPostsByBounds FAILED: $e\n$st');
     }
   }
 

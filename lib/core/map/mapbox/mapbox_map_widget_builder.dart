@@ -20,10 +20,7 @@ class MapboxMapWidgetBuilder implements JogyMapWidgetBuilder {
 
   @override
   Widget build(JogyMapOptions options) {
-    return _MapboxMapWrapper(
-      options: options,
-      styleUri: styleUri,
-    );
+    return _MapboxMapWrapper(options: options, styleUri: styleUri);
   }
 }
 
@@ -32,10 +29,7 @@ class _MapboxMapWrapper extends StatefulWidget {
   final JogyMapOptions options;
   final String? styleUri;
 
-  const _MapboxMapWrapper({
-    required this.options,
-    this.styleUri,
-  });
+  const _MapboxMapWrapper({required this.options, this.styleUri});
 
   @override
   State<_MapboxMapWrapper> createState() => _MapboxMapWrapperState();
@@ -91,6 +85,7 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
       zoom: widget.options.initialZoom,
       pitch: widget.options.initialPitch,
       bearing: widget.options.initialBearing,
+      viewportSize: _readViewportSizeFallback(),
     );
 
     _controller = MapboxMapController(mapboxMap, initialState);
@@ -103,18 +98,48 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
     // 首次创建后立即尝试同步一次相机状态（含视口尺寸）
     _updateCameraState(MapMoveSource.programmatic);
+    // Mapbox onMapCreated 可能早于 Flutter layout / native getSize 可用。
+    // 下一帧再同步一次并触发 idle，让 overlay 和聚合都有机会拿到非 0 viewport。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateCameraState(MapMoveSource.programmatic, notifyIdle: true);
+    });
   }
 
   void _onCameraChanged(mapbox.CameraChangedEventData event) {
+    final controller = _controller;
+    if (controller == null) return;
+
     // 根据控制器是否正在执行程序化动画来判断事件来源
-    final source = (_controller?.isAnimating ?? false)
+    final source = controller.isAnimating
         ? MapMoveSource.animation
         : MapMoveSource.gesture;
-    _updateCameraState(source);
+    var viewportSize = controller.cameraState.viewportSize;
+    if (viewportSize.x <= 0 || viewportSize.y <= 0) {
+      viewportSize = _readViewportSizeFallback();
+    }
+
+    final center = event.cameraState.center.coordinates;
+    final newState = MapCameraState(
+      center: MapLatLng(center.lat.toDouble(), center.lng.toDouble()),
+      zoom: event.cameraState.zoom,
+      pitch: event.cameraState.pitch,
+      bearing: event.cameraState.bearing,
+      viewportSize: viewportSize,
+    );
+
+    controller.updateCameraState(newState);
+    widget.options.onCameraMove?.call(
+      MapCameraEvent(camera: newState, source: source),
+    );
   }
 
   void _onMapLoaded(mapbox.MapLoadedEventData event) {
     _updateCameraState(MapMoveSource.programmatic);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateCameraState(MapMoveSource.programmatic, notifyIdle: true);
+    });
     // 地图加载完成后启用原生定位 puck（带朝向箭头）
     _controller?.enableLocationPuck();
   }
@@ -133,7 +158,14 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
     try {
       final nativeMap = _controller!.nativeMap;
       final cameraState = await nativeMap.getCameraState();
-      final size = await nativeMap.getSize();
+      final nativeSize = await nativeMap.getSize();
+      var width = nativeSize.width.toDouble();
+      var height = nativeSize.height.toDouble();
+      if (width <= 0 || height <= 0) {
+        final fallback = _readViewportSizeFallback();
+        width = fallback.x;
+        height = fallback.y;
+      }
 
       final center = cameraState.center.coordinates;
       final newState = MapCameraState(
@@ -141,10 +173,7 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
         zoom: cameraState.zoom,
         pitch: cameraState.pitch,
         bearing: cameraState.bearing,
-        viewportSize: MapScreenPoint(
-          size.width.toDouble(),
-          size.height.toDouble(),
-        ),
+        viewportSize: MapScreenPoint(width, height),
       );
 
       _controller!.updateCameraState(newState);
@@ -163,6 +192,23 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
     } catch (_) {
       // 地图可能正在初始化
     }
+  }
+
+  MapScreenPoint _readViewportSizeFallback() {
+    final renderObject = context.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      final size = renderObject.size;
+      if (size.width > 0 && size.height > 0) {
+        return MapScreenPoint(size.width, size.height);
+      }
+    }
+
+    final media = MediaQuery.maybeOf(context);
+    if (media != null && media.size.width > 0 && media.size.height > 0) {
+      return MapScreenPoint(media.size.width, media.size.height);
+    }
+
+    return const MapScreenPoint(0, 0);
   }
 
   void _onTapListener(mapbox.MapContentGestureContext context) {

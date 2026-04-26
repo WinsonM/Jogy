@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/models/post_model.dart';
@@ -29,7 +28,9 @@ class MapBubbleWidget extends StatelessWidget {
   /// 聚合模式：cluster 不为 null
   final ClusterNode? cluster;
 
-  final double mapRotation; // 地图旋转角度（弧度）
+  /// Retained for call-site compatibility. Bubbles are screen-facing overlays
+  /// and should not rotate with the map bearing.
+  final double mapRotation;
 
   const MapBubbleWidget({
     super.key,
@@ -40,9 +41,9 @@ class MapBubbleWidget extends StatelessWidget {
     this.cluster,
     this.mapRotation = 0.0,
   }) : assert(
-          (post != null) ^ (cluster != null),
-          'MapBubbleWidget 必须且仅能提供 post 或 cluster 之一',
-        );
+         (post != null) ^ (cluster != null),
+         'MapBubbleWidget 必须且仅能提供 post 或 cluster 之一',
+       );
 
   bool get _isCluster => cluster != null;
 
@@ -51,61 +52,45 @@ class MapBubbleWidget extends StatelessWidget {
     // Cluster 不支持展开态，强制使用 collapsed 尺寸
     final effectiveExpanded = isExpanded && !_isCluster;
     final double baseSize = effectiveExpanded ? expandedSize : collapsedSize;
-    final double bubbleHeight =
-        effectiveExpanded ? expandedHeight : collapsedSize;
+    final double bubbleHeight = effectiveExpanded
+        ? expandedHeight
+        : collapsedSize;
 
     return GestureDetector(
       onTap: onTap,
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: Transform.rotate(
-          angle: -mapRotation, // 反向旋转以保持气泡垂直
-          alignment: Alignment.bottomCenter, // 以底部尖端为中心旋转
-          child: Transform.scale(
-            scale: scaleFactor,
-            alignment: Alignment.bottomCenter, // Scale from bottom tip
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.elasticOut,
-              width: baseSize,
-              height: bubbleHeight,
-              child: Stack(
-                alignment: Alignment.bottomCenter, // Align content from bottom
-                clipBehavior: Clip.none,
-                children: [
-                  // 玻璃模糊效果层 —— 只在「展开的单点」上渲染
-                  // cluster / 未展开单点 都跳过 BackdropFilter 以节省 GPU 开销
-                  if (effectiveExpanded)
-                    ClipPath(
-                      clipper: BubbleClipper(isExpanded: true),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: baseSize,
-                          height: bubbleHeight,
-                          color: Colors.transparent,
-                        ),
-                      ),
-                    ),
-                  // 气泡颜色层
-                  CustomPaint(
-                    size: Size(baseSize, bubbleHeight),
-                    painter: BubblePainter(
-                      color: _bubbleColor(),
-                      isExpanded: effectiveExpanded,
+        child: Transform.scale(
+          scale: scaleFactor,
+          alignment: Alignment.bottomCenter, // Scale from bottom tip
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.elasticOut,
+            width: baseSize,
+            height: bubbleHeight,
+            child: Stack(
+              alignment: Alignment.bottomCenter, // Align content from bottom
+              clipBehavior: Clip.none,
+              children: [
+                // 气泡颜色层。不要使用 BackdropFilter：展开气泡本身已经足够大，
+                // 背景玻璃模糊会遮挡地图可读性。
+                CustomPaint(
+                  size: Size(baseSize, bubbleHeight),
+                  painter: BubblePainter(
+                    color: _bubbleColor(),
+                    isExpanded: effectiveExpanded,
+                  ),
+                ),
+                if (scaleFactor >= 0.5)
+                  ClipPath(
+                    clipper: BubbleClipper(isExpanded: effectiveExpanded),
+                    child: SizedBox.expand(
+                      child: effectiveExpanded
+                          ? _buildExpandedContent(context)
+                          : _buildCollapsedContent(),
                     ),
                   ),
-                  if (scaleFactor >= 0.5)
-                    ClipPath(
-                      clipper: BubbleClipper(isExpanded: effectiveExpanded),
-                      child: SizedBox.expand(
-                        child: effectiveExpanded
-                            ? _buildExpandedContent(context)
-                            : _buildCollapsedContent(),
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
           ),
         ),
@@ -147,8 +132,8 @@ class MapBubbleWidget extends StatelessWidget {
     final label = n > 999
         ? '999+'
         : n > 99
-            ? '99+'
-            : '$n';
+        ? '99+'
+        : '$n';
     return Align(
       alignment: Alignment.topCenter,
       child: Padding(
@@ -233,9 +218,7 @@ class MapBubbleWidget extends StatelessWidget {
                             postProvider.toggleLike(p.id);
                           },
                           child: Icon(
-                            p.isLiked
-                                ? Icons.favorite
-                                : Icons.favorite_border,
+                            p.isLiked ? Icons.favorite : Icons.favorite_border,
                             size: 22,
                             color: p.isLiked ? Colors.red : Colors.black54,
                           ),
@@ -281,7 +264,7 @@ class BubblePainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final path = _buildBubblePath(size, isExpanded);
-    canvas.drawShadow(path, Colors.black.withOpacity(0.15), 10.0, true);
+    canvas.drawShadow(path, Colors.black.withValues(alpha: 0.15), 10.0, true);
     canvas.drawPath(path, paint);
   }
 

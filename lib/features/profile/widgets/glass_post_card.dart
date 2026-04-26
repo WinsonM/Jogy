@@ -61,17 +61,47 @@ class GlassPostCard extends StatelessWidget {
   }
 
   /// 构建左侧智能时间显示
+  ///
+  /// 已过期的 post：时间灰度更浅，下方加"已过期"灰底胶囊。让 profile 上的
+  /// 历史记录与 map（discover endpoint 会 filter 掉过期）的语义视觉上一致。
   Widget _buildDateColumn() {
     final timeText = TimeFormatter.formatRelative(post.createdAt);
+    final exp = post.expireAt;
+    final isExpired = exp != null && exp.isBefore(DateTime.now());
+
     return SizedBox(
       width: 56,
-      child: Text(
-        timeText,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: Colors.grey[700],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            timeText,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isExpired ? Colors.grey[400] : Colors.grey[700],
+            ),
+          ),
+          if (isExpired) ...[
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '已过期',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
