@@ -7,7 +7,7 @@ import 'pages/profile_page.dart';
 
 /// 根据目标 [userId] 判断"是不是当前登录用户"，是则跳 [MyProfilePage]，
 /// 否则跳 [ProfilePage]。所有"查看某用户资料"的入口都应走这个 helper，
-/// 避免在 5 处重复 `currentUser.id == userId` 的判断导致漂移。
+/// 避免在 5 处重复 `currentUserId == userId` 的判断导致漂移。
 ///
 /// - [userId] 是权威判断依据；为 null 时无法判断 self，直接回退到 [ProfilePage]。
 /// - 其他字段（[userName] / [avatarUrl] / [bio] / [gender] / [isFollowing]）
@@ -24,7 +24,7 @@ Future<void> openUserProfile(
   bool? isFollowing,
   bool replace = false,
 }) {
-  final currentUserId = context.read<AuthService>().currentUser?.id;
+  final currentUserId = context.read<AuthService>().currentUserId;
   final isMe = userId != null && userId == currentUserId;
 
   final route = MaterialPageRoute<void>(

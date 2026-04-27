@@ -44,11 +44,6 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   JogyMapController? _jogyMapController;
-  // 以屏幕几何中心为基准的 Y 方向偏移（尖角位置）。
-  // 0 表示尖角在屏幕垂直正中心；负值整体往上移，正值整体往下移。
-  // 这里取「往上移动约半个展开气泡高度」，让整块气泡区域落在屏幕视觉中心附近。
-  static const double _expandedBubbleTipYOffset =
-      -MapBubbleWidget.expandedHeight / 2;
 
   int? _expandedIndex; // Currently expanded bubble (auto or manual)
   int? _manualExpandedIndex; // Track user manual click
@@ -259,16 +254,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     });
   }
 
-  // 计算”理想尖角位置”（用于自动展开判断和点击居中），只依赖屏幕尺寸，
-  // 与底部导航栏等 UI 高度解耦，保证以后改导航栏不会影响气泡锚点。
+  // 屏幕几何中心：同时作为自动展开判定锚点和点击 bubble 后的尖角目标。
+  // 这与进入主页时本机定位点所在的视觉中心对齐，不再把触发区放到屏幕上方。
   Offset _expandedBubbleTipTarget(MapScreenPoint viewportSize) {
-    final screenCenterY = viewportSize.y / 2;
-    // 向上偏移 1/3 屏幕高度
-    final upwardOffset = viewportSize.y / 7;
-    return Offset(
-      viewportSize.x / 2,
-      screenCenterY + _expandedBubbleTipYOffset - upwardOffset,
-    );
+    return Offset(viewportSize.x / 2, viewportSize.y / 2);
   }
 
   Offset _expandedBubbleCenterOffset(MapScreenPoint viewportSize) {
@@ -279,7 +268,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     return Offset(0, targetTip.dy - screenCenterY);
   }
 
-  // Calculate scale factor based on distance from screen center
+  // 自动展开选择最靠近屏幕中心的 bubble；所有 bubble 保持固定尺寸。
   void _updateScaleFactors() {
     try {
       final controller = _jogyMapController;
@@ -298,7 +287,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       final centerX = focusPoint.dx;
       final centerY = focusPoint.dy;
 
-      final maxDistance = math.sqrt(vw * vw + vh * vh) / 2;
       bool needsRebuild = false;
       bool suppressedStillEligible = false;
 
@@ -335,17 +323,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           }
         }
 
-        // Normalize distance (0 at center, 1 at corners)
-        final normalizedDistance = (distance / maxDistance).clamp(0.0, 1.0);
-
-        // Apply exponential decay for smooth scaling
-        // Scale from 1.0 (center) to 0.3 (edges)
-        final scaleFactor = 0.3 + (0.7 * (1.0 - normalizedDistance));
-        final clampedScale = scaleFactor.clamp(0.3, 1.0);
-        if ((_scaleFactors[i] ?? 1.0) != clampedScale) {
+        // 所有未展开 bubble 同一固定尺寸，不再随距 focus 距离衰减。
+        // 老的 0.3→1.0 放射衰减会让不同屏幕位置的 bubble 大小和
+        // 主体到尖角的视觉距离不一致。
+        if ((_scaleFactors[i] ?? 1.0) != 1.0) {
           needsRebuild = true;
         }
-        _scaleFactors[i] = clampedScale;
+        _scaleFactors[i] = 1.0;
       }
 
       if (_suppressedAutoIndex != null && !suppressedStillEligible) {

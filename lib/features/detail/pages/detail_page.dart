@@ -85,8 +85,8 @@ class _DetailPageState extends State<DetailPage> {
   /// 用 read（非 watch）—— AuthService 在登录态变更时一般会触发整页重建，
   /// 这里再 listen 一次只是徒增开销。
   bool _isOwnPost(PostModel post) {
-    final me = context.read<AuthService>().currentUser;
-    return me != null && me.id == post.user.id;
+    final currentUserId = context.read<AuthService>().currentUserId;
+    return currentUserId != null && currentUserId == post.user.id;
   }
 
   Future<void> _confirmDelete(PostModel post) async {
@@ -115,19 +115,14 @@ class _DetailPageState extends State<DetailPage> {
       if (!mounted) return;
       context.read<PostProvider>().removePost(post.id);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已删除'),
-          duration: Duration(seconds: 2),
-        ),
+        const SnackBar(content: Text('已删除'), duration: Duration(seconds: 2)),
       );
       Navigator.pop(context); // 关闭详情页
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '删除失败：${e.toString().replaceFirst('Exception: ', '')}',
-          ),
+          content: Text('删除失败：${e.toString().replaceFirst('Exception: ', '')}'),
         ),
       );
     }
@@ -146,10 +141,8 @@ class _DetailPageState extends State<DetailPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ImageViewerPage(
-          imageUrls: imageUrls,
-          initialIndex: initialIndex,
-        ),
+        builder: (_) =>
+            ImageViewerPage(imageUrls: imageUrls, initialIndex: initialIndex),
       ),
     );
   }
@@ -261,244 +254,238 @@ class _DetailPageState extends State<DetailPage> {
     bool isOwn,
   ) {
     return Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Image gallery with PageView
+                if (post.imageUrls.isNotEmpty)
+                  Stack(
                     children: [
-                      // Image gallery with PageView
-                      if (post.imageUrls.isNotEmpty)
-                        Stack(
-                          children: [
-                            SizedBox(
-                              height: 300,
-                              child: PageView.builder(
-                                controller: _pageController,
-                                itemCount: post.imageUrls.length,
-                                onPageChanged: (index) {
-                                  setState(() {
-                                    _currentImageIndex = index;
-                                  });
-                                },
-                                itemBuilder: (context, index) {
-                                  // 单击图片 → 全屏多图查看器（ImageViewerPage）。
-                                  // behavior: opaque 让 GestureDetector 即使
-                                  // 在 transparent 区域也吃到 tap。
-                                  return GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => _openImageViewer(
-                                      post.imageUrls,
-                                      index,
-                                    ),
-                                    child: Image.network(
-                                      post.imageUrls[index],
-                                      width: double.infinity,
-                                      height: 300,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                        return Container(
-                                          height: 300,
-                                          color: Colors.grey[300],
-                                          child: const Center(
-                                            child: Icon(Icons.error),
-                                          ),
-                                        );
-                                      },
+                      SizedBox(
+                        height: 300,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: post.imageUrls.length,
+                          onPageChanged: (index) {
+                            setState(() {
+                              _currentImageIndex = index;
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            // 单击图片 → 全屏多图查看器（ImageViewerPage）。
+                            // behavior: opaque 让 GestureDetector 即使
+                            // 在 transparent 区域也吃到 tap。
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () =>
+                                  _openImageViewer(post.imageUrls, index),
+                              child: Image.network(
+                                post.imageUrls[index],
+                                width: double.infinity,
+                                height: 300,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    height: 300,
+                                    color: Colors.grey[300],
+                                    child: const Center(
+                                      child: Icon(Icons.error),
                                     ),
                                   );
                                 },
                               ),
-                            ),
-                            // Page indicator
-                            if (post.imageUrls.length > 1)
-                              Positioned(
-                                bottom: 16,
-                                right: 16,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.6),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${_currentImageIndex + 1}/${post.imageUrls.length}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            // Dot indicators
-                            if (post.imageUrls.length > 1)
-                              Positioned(
-                                bottom: 16,
-                                left: 0,
-                                right: 0,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: List.generate(
-                                    post.imageUrls.length,
-                                    (index) => Container(
-                                      margin: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                      ),
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: _currentImageIndex == index
-                                            ? Colors.white
-                                            : Colors.white.withOpacity(0.4),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
+                            );
+                          },
                         ),
+                      ),
+                      // Page indicator
+                      if (post.imageUrls.length > 1)
+                        Positioned(
+                          bottom: 16,
+                          right: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${_currentImageIndex + 1}/${post.imageUrls.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Dot indicators
+                      if (post.imageUrls.length > 1)
+                        Positioned(
+                          bottom: 16,
+                          left: 0,
+                          right: 0,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              post.imageUrls.length,
+                              (index) => Container(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 3,
+                                ),
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _currentImageIndex == index
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.4),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                // Post content
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // User info
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () =>
+                                openUserProfile(context, userId: post.user.id),
+                            child: CircleAvatar(
+                              radius: 20,
+                              backgroundImage: NetworkImage(
+                                post.user.avatarUrl,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => openUserProfile(
+                                context,
+                                userId: post.user.id,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    post.user.username,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatTime(post.createdAt),
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // 自己的 post 不显示"关注 / 私信" —— 没意义。
+                          if (!isOwn) ...[
+                            _buildFollowButton(),
+                            const SizedBox(width: 8),
+                            _buildMessageButton(),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
 
                       // Post content
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // User info
-                            Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () => openUserProfile(
-                                    context,
-                                    userId: post.user.id,
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 20,
-                                    backgroundImage: NetworkImage(
-                                      post.user.avatarUrl,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => openUserProfile(
-                                      context,
-                                      userId: post.user.id,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          post.user.username,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        Text(
-                                          _formatTime(post.createdAt),
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                // 自己的 post 不显示"关注 / 私信" —— 没意义。
-                                if (!isOwn) ...[
-                                  _buildFollowButton(),
-                                  const SizedBox(width: 8),
-                                  _buildMessageButton(),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Post content
-                            Text(
-                              post.content,
-                              style: const TextStyle(fontSize: 15, height: 1.5),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Location
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.location_on,
-                                  size: 16,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  post.location.placeName ??
-                                      '${post.location.latitude}, ${post.location.longitude}',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                      Text(
+                        post.content,
+                        style: const TextStyle(fontSize: 15, height: 1.5),
                       ),
+                      const SizedBox(height: 16),
 
-                      const Divider(height: 1),
-
-                      // Comments section
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Text(
-                              '共 ${post.comments.length} 条评论',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      // Location
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            post.location.placeName ??
+                                '${post.location.latitude}, ${post.location.longitude}',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
                             ),
-                            const Icon(Icons.menu, size: 20),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-
-                      // Comments list
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: post.comments.length,
-                        itemBuilder: (context, index) {
-                          final comment = post.comments[index];
-                          return _buildCommentItem(
-                            context,
-                            post.id,
-                            comment,
-                            postProvider,
-                          );
-                        },
-                      ),
-
-                      const SizedBox(height: 80),
                     ],
                   ),
                 ),
-              ),
 
-              // Bottom action bar
-              _buildBottomBar(context, post, postProvider),
-            ],
-          );
+                const Divider(height: 1),
+
+                // Comments section
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Text(
+                        '共 ${post.comments.length} 条评论',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Icon(Icons.menu, size: 20),
+                    ],
+                  ),
+                ),
+
+                // Comments list
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: post.comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = post.comments[index];
+                    return _buildCommentItem(
+                      context,
+                      post.id,
+                      comment,
+                      postProvider,
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 80),
+              ],
+            ),
+          ),
+        ),
+
+        // Bottom action bar
+        _buildBottomBar(context, post, postProvider),
+      ],
+    );
   }
 
   Widget _buildCommentItem(

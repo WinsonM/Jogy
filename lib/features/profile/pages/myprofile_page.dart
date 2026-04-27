@@ -79,27 +79,33 @@ class _MyProfilePageState extends State<MyProfilePage> {
       // 三个 fetch 各自独立。早先用 Future.wait 任何一条挂掉就会让其它两条
       // 的成功结果也被丢弃 → 整页 0 post。改成并行触发 + 各自 catch，
       // 让每条 tab 独立 succeed/fail。失败时打日志（之前是静默的）。
-      final myPostsFut = _remote.fetchPostsByUser(user.id).then(
-        (v) => v,
-        onError: (e, st) {
-          debugPrint('[MyProfile] fetchPostsByUser FAILED: $e\n$st');
-          return <PostModel>[];
-        },
-      );
-      final likedFut = _remote.fetchLikedPosts(user.id).then(
-        (v) => v,
-        onError: (e, st) {
-          debugPrint('[MyProfile] fetchLikedPosts FAILED: $e\n$st');
-          return <PostModel>[];
-        },
-      );
-      final favoritedFut = _remote.fetchFavoritedPosts(user.id).then(
-        (v) => v,
-        onError: (e, st) {
-          debugPrint('[MyProfile] fetchFavoritedPosts FAILED: $e\n$st');
-          return <PostModel>[];
-        },
-      );
+      final myPostsFut = _remote
+          .fetchPostsByUser(user.id)
+          .then(
+            (v) => v,
+            onError: (e, st) {
+              debugPrint('[MyProfile] fetchPostsByUser FAILED: $e\n$st');
+              return <PostModel>[];
+            },
+          );
+      final likedFut = _remote
+          .fetchLikedPosts(user.id)
+          .then(
+            (v) => v,
+            onError: (e, st) {
+              debugPrint('[MyProfile] fetchLikedPosts FAILED: $e\n$st');
+              return <PostModel>[];
+            },
+          );
+      final favoritedFut = _remote
+          .fetchFavoritedPosts(user.id)
+          .then(
+            (v) => v,
+            onError: (e, st) {
+              debugPrint('[MyProfile] fetchFavoritedPosts FAILED: $e\n$st');
+              return <PostModel>[];
+            },
+          );
 
       final myPosts = await myPostsFut;
       final liked = await likedFut;
@@ -192,7 +198,9 @@ class _MyProfilePageState extends State<MyProfilePage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载失败：${e.toString().replaceFirst("Exception: ", "")}')),
+        SnackBar(
+          content: Text('加载失败：${e.toString().replaceFirst("Exception: ", "")}'),
+        ),
       );
     }
   }
@@ -223,6 +231,8 @@ class _MyProfilePageState extends State<MyProfilePage> {
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final isPushMode = Navigator.canPop(context);
     if (_pinnedTabY == 0.0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _updatePinnedTabY();
@@ -255,10 +265,14 @@ class _MyProfilePageState extends State<MyProfilePage> {
                     backgroundImage: _localAvatarFile != null
                         ? FileImage(_localAvatarFile!) as ImageProvider
                         : (_avatarUrl.isNotEmpty
-                            ? NetworkImage(_avatarUrl)
-                            : null),
+                              ? NetworkImage(_avatarUrl)
+                              : null),
                     child: _avatarUrl.isEmpty && _localAvatarFile == null
-                        ? const Icon(Icons.person, size: 40, color: Colors.white)
+                        ? const Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Colors.white,
+                          )
                         : null,
                   ),
                 const SizedBox(height: 16),
@@ -421,7 +435,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 const SizedBox(height: 10),
                 // 根据选中的 tab 显示不同内容
                 _buildTabContent(),
-                const SizedBox(height: 100),
+                SizedBox(height: isPushMode ? bottomPadding + 16 : 100),
               ],
             ),
           ),
@@ -447,7 +461,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
           ),
           // 固定的返回按钮 - 左上角（仅当通过 Navigator.push 进来时显示；
           // 从 HomeWrapper 的 IndexedStack 渲染时 canPop=false，不出现）
-          if (Navigator.canPop(context))
+          if (isPushMode)
             Positioned(
               top: topPadding + 12,
               left: 16,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../data/datasources/remote_data_source.dart';
@@ -23,15 +24,17 @@ class AuthService extends ChangeNotifier {
   Timer? _refreshTimer;
   bool _loggedIn = false;
   UserModel? _currentUser;
+  String? _currentUserId;
 
   bool get isLoggedIn => _loggedIn;
   UserModel? get currentUser => _currentUser;
+  String? get currentUserId => _currentUserId ?? _currentUser?.id;
 
   AuthService({
     required RemoteDataSource remoteDataSource,
     FlutterSecureStorage? storage,
-  })  : _remote = remoteDataSource,
-        _storage = storage ?? const FlutterSecureStorage();
+  }) : _remote = remoteDataSource,
+       _storage = storage ?? const FlutterSecureStorage();
 
   // ==================== Bootstrap ====================
 
@@ -55,6 +58,7 @@ class AuthService extends ChangeNotifier {
       // Token still valid (with 60s margin) — use it directly
       _remote.setAuthToken(accessToken);
       _loggedIn = true;
+      _currentUserId = _userIdFromAccessToken(accessToken);
       _scheduleRefresh(expiresAt - now);
       notifyListeners();
       // Fetch user profile in background (non-blocking)
@@ -80,6 +84,7 @@ class AuthService extends ChangeNotifier {
 
     // Fetch user profile
     _currentUser = await _remote.getCurrentUser();
+    _currentUserId = _currentUser?.id ?? _currentUserId;
     notifyListeners();
     return _currentUser!;
   }
@@ -107,6 +112,7 @@ class AuthService extends ChangeNotifier {
       final userJson = data['user'];
       if (userJson is Map<String, dynamic>) {
         _currentUser = UserModel.fromJson(userJson);
+        _currentUserId = _currentUser?.id ?? _currentUserId;
       }
       notifyListeners();
     }
@@ -134,6 +140,7 @@ class AuthService extends ChangeNotifier {
     _refreshTimer = null;
     _loggedIn = false;
     _currentUser = null;
+    _currentUserId = null;
     await _clearStorage();
     notifyListeners();
   }
@@ -145,8 +152,7 @@ class AuthService extends ChangeNotifier {
     final refreshToken = data['refresh_token'] as String;
     final expiresIn = data['expires_in'] as int; // seconds
 
-    final expiresAt =
-        DateTime.now().millisecondsSinceEpoch ~/ 1000 + expiresIn;
+    final expiresAt = DateTime.now().millisecondsSinceEpoch ~/ 1000 + expiresIn;
 
     // Persist
     await _storage.write(key: _kAccessToken, value: accessToken);
@@ -156,6 +162,10 @@ class AuthService extends ChangeNotifier {
     // Apply to HTTP client
     _remote.setAuthToken(accessToken);
     _loggedIn = true;
+    _currentUserId =
+        _userIdFromTokenResponse(data) ??
+        _userIdFromAccessToken(accessToken) ??
+        _currentUserId;
 
     // Schedule auto-refresh
     _scheduleRefresh(expiresIn);
@@ -194,10 +204,37 @@ class AuthService extends ChangeNotifier {
   Future<void> _fetchCurrentUser() async {
     try {
       _currentUser = await _remote.getCurrentUser();
+      _currentUserId = _currentUser?.id ?? _currentUserId;
       notifyListeners();
     } catch (_) {
       // Non-critical — user info will be fetched later
     }
+  }
+
+  String? _userIdFromTokenResponse(Map<String, dynamic> data) {
+    final userJson = data['user'];
+    if (userJson is Map<String, dynamic>) {
+      return userJson['id']?.toString();
+    }
+    return null;
+  }
+
+  String? _userIdFromAccessToken(String token) {
+    final parts = token.split('.');
+    if (parts.length < 2) return null;
+
+    try {
+      final payload = utf8.decode(
+        base64Url.decode(base64Url.normalize(parts[1])),
+      );
+      final payloadJson = jsonDecode(payload);
+      if (payloadJson is Map<String, dynamic>) {
+        return payloadJson['sub']?.toString();
+      }
+    } catch (_) {
+      // Invalid or non-JWT token. Keep the hydrated user fallback.
+    }
+    return null;
   }
 
   @override
