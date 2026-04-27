@@ -15,6 +15,7 @@ import '../../../core/map/map_types.dart';
 import '../../../core/map/map_controller.dart';
 import '../../../core/map/map_widget_builder.dart';
 import '../../../core/map/mapbox/mapbox_map_widget_builder.dart';
+import '../widgets/gesture_passthrough_stack.dart';
 import '../widgets/map_bubble.dart';
 import '../widgets/post_bubbles_overlay.dart';
 import '../widgets/zoom_arc_control.dart';
@@ -1117,56 +1118,68 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
         return Stack(
           children: [
-            // 基础地图 Widget（由 Mapbox 适配器构建）
-            MapboxMapWidgetBuilder(styleUri: MapConfig.mapboxStyleUri).build(
-              JogyMapOptions(
-                initialCenter: mapCenter,
-                initialZoom: 17.0,
-                initialPitch: 45.0,
-                onMapCreated: (controller) {
-                  final viewport = controller.cameraState.viewportSize;
-                  debugPrint(
-                    '[MapPage] onMapCreated posts=${posts.length} '
-                    'viewport=${viewport.x.toStringAsFixed(0)}x'
-                    '${viewport.y.toStringAsFixed(0)}',
-                  );
-                  setState(() {
-                    _jogyMapController = controller;
-                    _isViewportReady =
-                        controller.cameraState.viewportSize.x > 0 &&
-                        controller.cameraState.viewportSize.y > 0;
-                  });
-                  // 初次拉取到 posts 时已经 load，这里补一次以防 onMapCreated 晚于数据
-                  if (posts.isNotEmpty) {
-                    _clusterEngine.load(posts);
-                  }
-                  // Initialize bubble positions + 首次聚合计算
-                  _recomputeClusters();
-                },
-                onCameraMove: _onCameraMove,
-                onCameraIdle: _onCameraIdle,
-                onTap: _onMapTap,
+            Positioned.fill(
+              child: GesturePassthroughStack(
+                fit: StackFit.expand,
+                children: [
+                  // 基础地图 Widget（由 Mapbox 适配器构建）
+                  MapboxMapWidgetBuilder(
+                    styleUri: MapConfig.mapboxStyleUri,
+                  ).build(
+                    JogyMapOptions(
+                      initialCenter: mapCenter,
+                      initialZoom: 17.0,
+                      initialPitch: 45.0,
+                      onMapCreated: (controller) {
+                        final viewport = controller.cameraState.viewportSize;
+                        debugPrint(
+                          '[MapPage] onMapCreated posts=${posts.length} '
+                          'viewport=${viewport.x.toStringAsFixed(0)}x'
+                          '${viewport.y.toStringAsFixed(0)}',
+                        );
+                        setState(() {
+                          _jogyMapController = controller;
+                          _isViewportReady =
+                              controller.cameraState.viewportSize.x > 0 &&
+                              controller.cameraState.viewportSize.y > 0;
+                        });
+                        // 初次拉取到 posts 时已经 load，这里补一次以防 onMapCreated 晚于数据
+                        if (posts.isNotEmpty) {
+                          _clusterEngine.load(posts);
+                        }
+                        // Initialize bubble positions + 首次聚合计算
+                        _recomputeClusters();
+                      },
+                      onCameraMove: _onCameraMove,
+                      onCameraIdle: _onCameraIdle,
+                      onTap: _onMapTap,
+                    ),
+                  ),
+                  // 标记覆盖层。新版用 [PostBubblesOverlay]：
+                  //  - 不依赖 _isViewportReady gate（视口未就绪时该条静默 skip，下个 tick 自动补上）；
+                  //  - 不依赖 _clusterResults / _postScreenPoints 异步 cache；
+                  //  - 每次 _onCameraMove → _cameraTick.value++ 触发 overlay 内部 setState。
+                  //
+                  // GesturePassthroughStack 会让 bubble 和底层 MapWidget 同时进入
+                  // gesture arena：tap 仍由 bubble 处理，pan / pinch / rotate 交给 Mapbox。
+                  //
+                  // 旧的 renderItems / _buildItemOverlay / _pinnedPost / cluster engine
+                  // 路径暂时保留为 dead state（cleanup 留到后续 PR），避免一次性删动
+                  // 太多关联点（_clusterResults、_pinnedPost、_postScreenPoints、
+                  // _lastPostsSignature 等）。
+                  if (_jogyMapController != null)
+                    PostBubblesOverlay(
+                      controller: _jogyMapController!,
+                      cameraTick: _cameraTick,
+                      posts: posts,
+                      mapRotation: _mapRotation,
+                      expandedIndex: _expandedIndex,
+                      scaleFactors: _scaleFactors,
+                      onTap: _handleBubbleTap,
+                    ),
+                ],
               ),
             ),
-            // 标记覆盖层。新版用 [PostBubblesOverlay]：
-            //  - 不依赖 _isViewportReady gate（视口未就绪时该条静默 skip，下个 tick 自动补上）；
-            //  - 不依赖 _clusterResults / _postScreenPoints 异步 cache；
-            //  - 每次 _onCameraMove → _cameraTick.value++ 触发 overlay 内部 setState。
-            //
-            // 旧的 renderItems / _buildItemOverlay / _pinnedPost / cluster engine
-            // 路径暂时保留为 dead state（cleanup 留到后续 PR），避免一次性删动
-            // 太多关联点（_clusterResults、_pinnedPost、_postScreenPoints、
-            // _lastPostsSignature 等）。
-            if (_jogyMapController != null)
-              PostBubblesOverlay(
-                controller: _jogyMapController!,
-                cameraTick: _cameraTick,
-                posts: posts,
-                mapRotation: _mapRotation,
-                expandedIndex: _expandedIndex,
-                scaleFactors: _scaleFactors,
-                onTap: _handleBubbleTap,
-              ),
             // 顶部工具栏：搜索框 + 消息按钮 + 发布按钮
             Positioned(
               top: MediaQuery.of(context).padding.top + 12,

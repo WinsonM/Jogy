@@ -234,9 +234,13 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
         bearing: widget.options.initialBearing,
       ),
       viewport: _viewport,
-      // 让地图在嵌套滚动容器（如 Profile 的 SingleChildScrollView）中优先接管拖拽手势
+      // 让地图参与 tap / pan / scale 手势竞争。不要用 EagerGestureRecognizer：
+      // home map 的 Flutter bubble overlay 会与 MapWidget 同时命中；Eager 会抢走
+      // bubble 的点击。Pan/Scale 负责平移、缩放和旋转，Tap 保留地图空白处点击。
       gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-        Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+        Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+        Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
+        Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
       },
       onMapCreated: _onMapCreated,
       onMapLoadedListener: _onMapLoaded,
