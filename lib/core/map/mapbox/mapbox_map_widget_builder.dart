@@ -234,12 +234,13 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
         bearing: widget.options.initialBearing,
       ),
       viewport: _viewport,
-      // 让地图参与 tap / pan / scale 手势竞争。不要用 EagerGestureRecognizer：
+      // 让地图参与 tap / scale 手势竞争。不要用 EagerGestureRecognizer：
       // home map 的 Flutter bubble overlay 会与 MapWidget 同时命中；Eager 会抢走
-      // bubble 的点击。Pan/Scale 负责平移、缩放和旋转，Tap 保留地图空白处点击。
+      // bubble 的点击。Scale 负责 pan / pinch / rotate 这一组连续地图手势，
+      // Tap 保留地图空白处点击。不要同时注册 Pan：单指拖移时 Pan 会先赢
+      // gesture arena，之后同一轮手势再加第二根手指时 Scale 已经无法接管旋转。
       gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
         Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-        Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
         Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
       },
       onMapCreated: _onMapCreated,

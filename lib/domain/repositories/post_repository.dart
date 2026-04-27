@@ -16,4 +16,8 @@ abstract class PostRepository {
     required double maxLatitude,
     required double maxLongitude,
   });
+
+  Future<Map<String, dynamic>> toggleLikePost(String postId);
+
+  Future<Map<String, dynamic>> toggleFavoritePost(String postId);
 }

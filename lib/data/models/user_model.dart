@@ -6,6 +6,7 @@ class UserModel {
   final String avatarUrl;
   final String bio;
   final String gender;
+  final DateTime? birthday;
   final int followers;
   final int following;
 
@@ -15,6 +16,7 @@ class UserModel {
     required this.avatarUrl,
     required this.bio,
     this.gender = '保密',
+    this.birthday,
     this.followers = 0,
     this.following = 0,
   });
@@ -23,9 +25,12 @@ class UserModel {
     return UserModel(
       id: json['id'].toString(),
       username: json['username'] as String? ?? '',
-      avatarUrl: _resolveAvatar(json['avatarUrl'] as String? ?? ''),
+      avatarUrl: _resolveAvatar(
+        (json['avatarUrl'] as String?) ?? (json['avatar_url'] as String?) ?? '',
+      ),
       bio: json['bio'] as String? ?? '',
       gender: json['gender'] as String? ?? '保密',
+      birthday: _parseBirthday(json['birthday'] ?? json['birthdate']),
       followers: json['followers'] as int? ?? 0,
       following: json['following'] as int? ?? 0,
     );
@@ -38,6 +43,15 @@ class UserModel {
     return ApiConstants.resolveUrl(url);
   }
 
+  static DateTime? _parseBirthday(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -45,6 +59,7 @@ class UserModel {
       'avatarUrl': avatarUrl,
       'bio': bio,
       'gender': gender,
+      'birthday': birthday?.toIso8601String(),
       'followers': followers,
       'following': following,
     };

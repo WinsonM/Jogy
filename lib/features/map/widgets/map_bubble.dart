@@ -65,7 +65,10 @@ class MapBubbleWidget extends StatelessWidget {
           alignment: Alignment.bottomCenter, // Scale from bottom tip
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 400),
-            curve: Curves.elasticOut,
+            // Size animation must not overshoot. Elastic curves can drive the
+            // shrinking width/height below zero, which intermittently produces
+            // Flutter's red error widget during expand/collapse.
+            curve: Curves.easeOutCubic,
             width: baseSize,
             height: bubbleHeight,
             child: Stack(
@@ -85,9 +88,28 @@ class MapBubbleWidget extends StatelessWidget {
                   ClipPath(
                     clipper: BubbleClipper(isExpanded: effectiveExpanded),
                     child: SizedBox.expand(
-                      child: effectiveExpanded
-                          ? _buildExpandedContent(context)
-                          : _buildCollapsedContent(),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (!effectiveExpanded) {
+                            return _buildCollapsedContent();
+                          }
+
+                          // AnimatedContainer starts the expanded state while
+                          // the box is still near 60x60. Building the full
+                          // expanded card in those intermediate constraints can
+                          // overflow/throw, so delay the content until the card
+                          // is large enough. The painted bubble shell still
+                          // animates immediately.
+                          final canLayoutExpandedContent =
+                              constraints.maxWidth >= expandedSize * 0.82 &&
+                              constraints.maxHeight >= expandedHeight * 0.82;
+                          if (!canLayoutExpandedContent) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return _buildExpandedContent(context);
+                        },
+                      ),
                     ),
                   ),
               ],

@@ -128,6 +128,13 @@ class AuthService extends ChangeNotifier {
     await _remote.verifyCode(email, code);
   }
 
+  /// Replace the cached current user after profile edits.
+  void updateCurrentUser(UserModel user) {
+    _currentUser = user;
+    _currentUserId = user.id;
+    notifyListeners();
+  }
+
   /// Logout — clear tokens, reset state.
   Future<void> logout() async {
     try {

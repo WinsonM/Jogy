@@ -31,6 +31,11 @@ class BrowsingHistoryService {
   /// Clear all browsing history.
   void clearHistory() => _history.clear();
 
+  /// Remove a deleted post from browsing history.
+  void removePost(String postId) {
+    _history.removeWhere((p) => p.id == postId);
+  }
+
   /// Check if history is empty.
   bool get isEmpty => _history.isEmpty;
 

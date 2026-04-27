@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:provider/provider.dart';
+import '../../../core/services/auth_service.dart';
+import '../../../data/datasources/remote_data_source.dart';
+import '../../../data/models/user_model.dart';
 
 class EditProfilePage extends StatefulWidget {
   final String userName;
@@ -25,6 +29,7 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
+  final RemoteDataSource _remote = RemoteDataSource();
   late TextEditingController _userNameController;
   late TextEditingController _bioController;
   late String _currentAvatarUrl;
@@ -32,6 +37,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   DateTime? _birthday;
   File? _localAvatarFile; // 本地选择的头像文件
   final ImagePicker _picker = ImagePicker();
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -118,7 +124,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  void _saveProfile() {
+  Future<void> _saveProfile() async {
+    if (_isSaving) return;
+
     final newUserName = _userNameController.text.trim();
     final newBio = _bioController.text.trim();
 
@@ -129,15 +137,41 @@ class _EditProfilePageState extends State<EditProfilePage> {
       return;
     }
 
-    // 返回编辑后的数据
-    Navigator.pop(context, {
-      'userName': newUserName,
-      'avatarUrl': _currentAvatarUrl,
-      'localAvatarPath': _localAvatarFile?.path,
-      'bio': newBio,
-      'gender': _gender,
-      'birthday': _birthday,
-    });
+    setState(() => _isSaving = true);
+
+    try {
+      String? uploadedAvatarUrl;
+      if (_localAvatarFile != null) {
+        uploadedAvatarUrl = await _remote.uploadImage(_localAvatarFile!.path);
+      }
+
+      final updatedUser = await _remote.updateProfile(
+        username: newUserName,
+        avatarUrl: uploadedAvatarUrl,
+        bio: newBio,
+        gender: _gender,
+        birthday: _formatBirthday(_birthday),
+      );
+
+      if (!mounted) return;
+      context.read<AuthService>().updateCurrentUser(updatedUser);
+      Navigator.pop<UserModel>(context, updatedUser);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('保存失败：${e.toString().replaceFirst('Exception: ', '')}'),
+        ),
+      );
+    }
+  }
+
+  String? _formatBirthday(DateTime? value) {
+    if (value == null) return null;
+    return '${value.year.toString().padLeft(4, '0')}-'
+        '${value.month.toString().padLeft(2, '0')}-'
+        '${value.day.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -155,7 +189,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 SizedBox(height: topPadding + 60),
                 // 头像编辑区域
                 GestureDetector(
-                  onTap: _changeAvatar,
+                  onTap: _isSaving ? null : _changeAvatar,
                   child: Stack(
                     children: [
                       CircleAvatar(
@@ -163,7 +197,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         backgroundColor: Colors.grey[300],
                         backgroundImage: _localAvatarFile != null
                             ? FileImage(_localAvatarFile!) as ImageProvider
-                            : NetworkImage(_currentAvatarUrl),
+                            : (_currentAvatarUrl.isNotEmpty
+                                  ? NetworkImage(_currentAvatarUrl)
+                                  : null),
+                        child:
+                            _currentAvatarUrl.isEmpty &&
+                                _localAvatarFile == null
+                            ? const Icon(
+                                Icons.person,
+                                size: 40,
+                                color: Colors.white,
+                              )
+                            : null,
                       ),
                       Positioned(
                         right: 0,
@@ -309,7 +354,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 children: [
                   // 返回按钮
                   IconButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
                     icon: const Icon(Icons.arrow_back_ios_new, size: 20),
                   ),
                   const Expanded(
@@ -325,15 +370,21 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   ),
                   // 保存按钮
                   TextButton(
-                    onPressed: _saveProfile,
-                    child: const Text(
-                      '保存',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF3FAAF0),
-                      ),
-                    ),
+                    onPressed: _isSaving ? null : _saveProfile,
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            '保存',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF3FAAF0),
+                            ),
+                          ),
                   ),
                 ],
               ),

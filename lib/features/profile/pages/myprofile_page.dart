@@ -6,6 +6,7 @@ import '../../../core/services/auth_service.dart';
 import '../../../data/datasources/remote_data_source.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../../presentation/providers/post_provider.dart';
 import '../../auth/pages/login_page.dart';
 import '../widgets/posts_timeline.dart';
 import 'edit_profile_page.dart';
@@ -52,6 +53,9 @@ class _MyProfilePageState extends State<MyProfilePage> {
 
   bool _isLoading = true;
   String? _userId; // current user id for follow list queries
+  PostProvider? _postProvider;
+  final Set<String> _removedPostIds = <String>{};
+  int _lastHandledEngagementVersion = 0;
 
   @override
   void initState() {
@@ -61,6 +65,17 @@ class _MyProfilePageState extends State<MyProfilePage> {
       _updatePinnedTabY();
     });
     _loadProfile();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final postProvider = context.read<PostProvider>();
+    if (_postProvider == postProvider) return;
+    _postProvider?.removeListener(_syncPostProviderState);
+    _postProvider = postProvider;
+    _postProvider!.addListener(_syncPostProviderState);
+    _syncPostProviderState();
   }
 
   Future<void> _loadProfile() async {
@@ -117,9 +132,9 @@ class _MyProfilePageState extends State<MyProfilePage> {
         'myPosts=${myPosts.length} liked=${liked.length} favorited=${favorited.length}',
       );
       setState(() {
-        _myPosts = myPosts;
-        _likedPosts = liked;
-        _favoritedPosts = favorited;
+        _myPosts = _filterRemovedPosts(myPosts);
+        _likedPosts = _filterRemovedPosts(liked);
+        _favoritedPosts = _filterRemovedPosts(favorited);
         _isLoading = false;
       });
     } catch (e, st) {
@@ -133,8 +148,10 @@ class _MyProfilePageState extends State<MyProfilePage> {
     setState(() {
       _userName = user.username;
       _avatarUrl = user.avatarUrl;
+      _localAvatarFile = null;
       _bio = user.bio;
       _gender = user.gender;
+      _birthday = user.birthday;
       _followersCount = user.followers;
       _followingCount = user.following;
     });
@@ -142,9 +159,26 @@ class _MyProfilePageState extends State<MyProfilePage> {
 
   @override
   void dispose() {
+    _postProvider?.removeListener(_syncPostProviderState);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _syncPostProviderState() {
+    final postId = _postProvider?.lastRemovedPostId;
+    if (!mounted) return;
+    if (postId != null) {
+      _removePostFromLocalLists(postId);
+    }
+
+    final engagement = _postProvider?.lastEngagementChange;
+    if (engagement == null ||
+        engagement.version == _lastHandledEngagementVersion) {
+      return;
+    }
+    _lastHandledEngagementVersion = engagement.version;
+    _applyEngagementChange(engagement);
   }
 
   void _onScroll() {
@@ -228,6 +262,84 @@ class _MyProfilePageState extends State<MyProfilePage> {
     );
   }
 
+  void _handleTabSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity.abs() < 250) return;
+
+    final nextIndex = velocity < 0
+        ? (_selectedTabIndex < 2 ? _selectedTabIndex + 1 : 2)
+        : (_selectedTabIndex > 0 ? _selectedTabIndex - 1 : 0);
+    if (nextIndex == _selectedTabIndex) return;
+    setState(() => _selectedTabIndex = nextIndex);
+  }
+
+  Future<void> _openPostDetail(PostModel post) async {
+    final deletedPostId = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => DetailPage(postId: post.id)),
+    );
+    if (!mounted || deletedPostId == null) return;
+    _removePostFromLocalLists(deletedPostId);
+  }
+
+  void _removePostFromLocalLists(String postId) {
+    _removedPostIds.add(postId);
+    final hasPost =
+        _myPosts.any((post) => post.id == postId) ||
+        _likedPosts.any((post) => post.id == postId) ||
+        _favoritedPosts.any((post) => post.id == postId);
+    if (!hasPost) return;
+
+    setState(() {
+      _myPosts.removeWhere((post) => post.id == postId);
+      _likedPosts.removeWhere((post) => post.id == postId);
+      _favoritedPosts.removeWhere((post) => post.id == postId);
+    });
+  }
+
+  List<PostModel> _filterRemovedPosts(List<PostModel> posts) {
+    if (_removedPostIds.isEmpty) return posts;
+    return posts.where((post) => !_removedPostIds.contains(post.id)).toList();
+  }
+
+  void _applyEngagementChange(PostEngagementChange change) {
+    if (_removedPostIds.contains(change.post.id)) return;
+
+    setState(() {
+      _replacePostIfPresent(_myPosts, change.post);
+      _replacePostIfPresent(_likedPosts, change.post);
+      _replacePostIfPresent(_favoritedPosts, change.post);
+
+      if (change.isLiked != null) {
+        if (change.isLiked!) {
+          _upsertPost(_likedPosts, change.post);
+        } else {
+          _likedPosts.removeWhere((post) => post.id == change.post.id);
+        }
+      }
+
+      if (change.isFavorited != null) {
+        if (change.isFavorited!) {
+          _upsertPost(_favoritedPosts, change.post);
+        } else {
+          _favoritedPosts.removeWhere((post) => post.id == change.post.id);
+        }
+      }
+    });
+  }
+
+  void _replacePostIfPresent(List<PostModel> posts, PostModel updated) {
+    final index = posts.indexWhere((post) => post.id == updated.id);
+    if (index != -1) {
+      posts[index] = updated;
+    }
+  }
+
+  void _upsertPost(List<PostModel> posts, PostModel updated) {
+    posts.removeWhere((post) => post.id == updated.id);
+    posts.insert(0, updated);
+  }
+
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
@@ -247,6 +359,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
           // 可滚动内容
           SingleChildScrollView(
             controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
                 // 顶部留白
@@ -289,37 +402,26 @@ class _MyProfilePageState extends State<MyProfilePage> {
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () async {
-                        final result =
-                            await Navigator.push<Map<String, dynamic>>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => EditProfilePage(
-                                  userName: _userName,
-                                  avatarUrl: _avatarUrl,
-                                  bio: _bio,
-                                  gender: _gender,
-                                  birthday: _birthday,
-                                ),
-                              ),
-                            );
-                        // 更新用户资料
-                        if (result != null && mounted) {
-                          setState(() {
-                            _userName =
-                                result['userName'] as String? ?? _userName;
-                            _avatarUrl =
-                                result['avatarUrl'] as String? ?? _avatarUrl;
-                            final localPath =
-                                result['localAvatarPath'] as String?;
-                            if (localPath != null) {
-                              _localAvatarFile = File(localPath);
-                            }
-                            _bio = result['bio'] as String? ?? _bio;
-                            _gender = result['gender'] as String? ?? _gender;
-                            _birthday =
-                                result['birthday'] as DateTime? ?? _birthday;
-                          });
-                        }
+                        final updatedUser = await Navigator.push<UserModel>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditProfilePage(
+                              userName: _userName,
+                              avatarUrl: _avatarUrl,
+                              bio: _bio,
+                              gender: _gender,
+                              birthday: _birthday,
+                            ),
+                          ),
+                        );
+                        if (!context.mounted || updatedUser == null) return;
+                        _applyUserData(updatedUser);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('资料已保存'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
                       },
                       child: Icon(
                         Icons.edit_outlined,
@@ -434,7 +536,11 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 ),
                 const SizedBox(height: 10),
                 // 根据选中的 tab 显示不同内容
-                _buildTabContent(),
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: _handleTabSwipe,
+                  child: _buildTabContent(),
+                ),
                 SizedBox(height: isPushMode ? bottomPadding + 16 : 100),
               ],
             ),
@@ -698,28 +804,11 @@ class _MyProfilePageState extends State<MyProfilePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: PostsMapView(
                   posts: _myPosts,
-                  onPostTap: (post) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => DetailPage(postId: post.id),
-                      ),
-                    );
-                  },
+                  onPostTap: _openPostDetail,
                 ),
               )
             else
-              PostsTimeline(
-                posts: _myPosts,
-                onPostTap: (post) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DetailPage(postId: post.id),
-                    ),
-                  );
-                },
-              ),
+              PostsTimeline(posts: _myPosts, onPostTap: _openPostDetail),
             if (_isMapView) const SizedBox(height: 25), // 调整这里的高度值
           ],
         );
@@ -812,28 +901,10 @@ class _MyProfilePageState extends State<MyProfilePage> {
         if (_isMapView)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: PostsMapView(
-              posts: posts,
-              onPostTap: (post) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DetailPage(postId: post.id),
-                  ),
-                );
-              },
-            ),
+            child: PostsMapView(posts: posts, onPostTap: _openPostDetail),
           )
         else
-          PostsGridView(
-            posts: posts,
-            onPostTap: (post) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => DetailPage(postId: post.id)),
-              );
-            },
-          ),
+          PostsGridView(posts: posts, onPostTap: _openPostDetail),
         if (_isMapView) const SizedBox(height: 25),
       ],
     );

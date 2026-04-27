@@ -5,6 +5,7 @@ import '../../../data/datasources/remote_data_source.dart';
 import '../../../data/models/post_model.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../profile/profile_navigation.dart';
+import '../../profile/services/browsing_history_service.dart';
 import '../widgets/edit_post_sheet.dart';
 import 'image_viewer_page.dart';
 
@@ -20,11 +21,36 @@ class DetailPage extends StatefulWidget {
 class _DetailPageState extends State<DetailPage> {
   final PageController _pageController = PageController();
   int _currentImageIndex = 0;
+  PostModel? _fetchedPost;
+  bool _isFetchingPost = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshPostFromBackend();
+    });
+  }
 
   @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshPostFromBackend() async {
+    final postId = widget.postId;
+    if (postId == null || !mounted) return;
+
+    setState(() => _isFetchingPost = true);
+    final fetched = await context.read<PostProvider>().getPostById(postId);
+    if (!mounted) return;
+
+    if (fetched != null) {
+      context.read<PostProvider>().updatePost(fetched);
+      _fetchedPost = fetched;
+    }
+    setState(() => _isFetchingPost = false);
   }
 
   void _showShareSheet(BuildContext context) {
@@ -114,10 +140,11 @@ class _DetailPageState extends State<DetailPage> {
       await RemoteDataSource().deletePost(post.id);
       if (!mounted) return;
       context.read<PostProvider>().removePost(post.id);
+      BrowsingHistoryService().removePost(post.id);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('已删除'), duration: Duration(seconds: 2)),
       );
-      Navigator.pop(context); // 关闭详情页
+      Navigator.pop(context, post.id); // 关闭详情页，并把删除结果返回给列表页
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -152,12 +179,13 @@ class _DetailPageState extends State<DetailPage> {
     return Consumer<PostProvider>(
       builder: (context, postProvider, child) {
         // Get the post - either by ID or use the first post as demo
-        final PostModel? post = widget.postId != null
+        final PostModel? providerPost = widget.postId != null
             ? postProvider.posts.cast<PostModel?>().firstWhere(
                 (p) => p?.id == widget.postId,
                 orElse: () => null,
               )
             : (postProvider.posts.isNotEmpty ? postProvider.posts[0] : null);
+        final PostModel? post = providerPost ?? _fetchedPost;
 
         if (post == null) {
           return Scaffold(
@@ -175,7 +203,11 @@ class _DetailPageState extends State<DetailPage> {
               ),
               centerTitle: true,
             ),
-            body: const Center(child: Text('Post not found')),
+            body: Center(
+              child: _isFetchingPost
+                  ? const CircularProgressIndicator()
+                  : const Text('Post not found'),
+            ),
           );
         }
 

@@ -71,4 +71,14 @@ class PostRepositoryImpl implements PostRepository {
     );
     return parsed;
   }
+
+  @override
+  Future<Map<String, dynamic>> toggleLikePost(String postId) {
+    return _remoteDataSource.toggleLikePost(postId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> toggleFavoritePost(String postId) {
+    return _remoteDataSource.toggleFavoritePost(postId);
+  }
 }

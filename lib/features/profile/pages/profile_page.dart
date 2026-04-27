@@ -169,7 +169,9 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       if (wasFollowing) {
         await _remote.unfollowUser(userId);
-        setState(() => _followersCount = (_followersCount - 1).clamp(0, 999999));
+        setState(
+          () => _followersCount = (_followersCount - 1).clamp(0, 999999),
+        );
       } else {
         await _remote.followUser(userId);
         setState(() => _followersCount += 1);
@@ -210,6 +212,17 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _handleTabSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity.abs() < 250) return;
+
+    final nextIndex = velocity < 0
+        ? (_selectedTabIndex < 2 ? _selectedTabIndex + 1 : 2)
+        : (_selectedTabIndex > 0 ? _selectedTabIndex - 1 : 0);
+    if (nextIndex == _selectedTabIndex) return;
+    setState(() => _selectedTabIndex = nextIndex);
+  }
+
   Widget _buildStatItem(String count, String label, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
@@ -244,6 +257,7 @@ class _ProfilePageState extends State<ProfilePage> {
           // 可滚动内容
           SingleChildScrollView(
             controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
                 // 顶部留白（给返回按钮留空间）
@@ -263,7 +277,11 @@ class _ProfilePageState extends State<ProfilePage> {
                         ? NetworkImage(_avatarUrl)
                         : null,
                     child: _avatarUrl.isEmpty
-                        ? const Icon(Icons.person, size: 40, color: Colors.white)
+                        ? const Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Colors.white,
+                          )
                         : null,
                   ),
                 const SizedBox(height: 16),
@@ -428,7 +446,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 10),
                 // 根据选中的 tab 显示不同内容
-                _buildTabContent(),
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: _handleTabSwipe,
+                  child: _buildTabContent(),
+                ),
                 const SizedBox(height: 100),
               ],
             ),
