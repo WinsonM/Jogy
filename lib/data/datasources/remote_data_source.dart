@@ -323,8 +323,12 @@ class RemoteDataSource {
 
   /// Partial update an existing post (author only).
   ///
-  /// 后端 `PATCH /posts/{id}` 仅接受 content_text / title / address_name /
-  /// expire_at；location / 媒体 / post_type 不可改（语义上属于"重新发布"）。
+  /// 后端 `PATCH /posts/{id}` 接受 content_text / title / address_name /
+  /// expire_at / media_urls；location / post_type 不可改（语义上属于"重新发布"）。
+  ///
+  /// `mediaUrls` 是**全量替换**语义：传 `[]` 删全部图片；传 `null`（不传）保留
+  /// 原图。混编（删几张 + 加几张）需先把保留的 url + 新上传后的 url 合并成一
+  /// 个完整数组再传。
   ///
   /// `expireAt` 传 ISO8601 字符串；想从短时长改为永久暂时不支持（PATCH 无法
   /// 区分"未提供"与"显式置 null"），未来如需要可加专门的 reset 端点。
@@ -334,12 +338,14 @@ class RemoteDataSource {
     String? contentText,
     String? addressName,
     String? expireAt,
+    List<String>? mediaUrls,
   }) async {
     final data = <String, dynamic>{};
     if (title != null) data['title'] = title;
     if (contentText != null) data['content_text'] = contentText;
     if (addressName != null) data['address_name'] = addressName;
     if (expireAt != null) data['expire_at'] = expireAt;
+    if (mediaUrls != null) data['media_urls'] = mediaUrls;
 
     Response response;
     try {

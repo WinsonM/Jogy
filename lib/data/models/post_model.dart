@@ -8,6 +8,10 @@ class PostModel {
   final String id;
   final UserModel user;
   final LocationModel location;
+
+  /// 可选标题（短文案，max 100 字）。后端 `Post.title: Optional[str]`。
+  final String? title;
+
   final String content;
   final List<String> imageUrls;
   final int likes;
@@ -30,6 +34,7 @@ class PostModel {
     required this.id,
     required this.user,
     required this.location,
+    this.title,
     required this.content,
     required this.imageUrls,
     this.likes = 0,
@@ -74,6 +79,7 @@ class PostModel {
       id: json['id']?.toString() ?? '',
       user: user,
       location: location,
+      title: json['title'] as String?,
       content: json['content'] as String? ?? '',
       imageUrls:
           (json['imageUrls'] as List<dynamic>?)
@@ -107,6 +113,7 @@ class PostModel {
       'id': id,
       'user': user.toJson(),
       'location': location.toJson(),
+      'title': title,
       'content': content,
       'imageUrls': imageUrls,
       'likes': likes,
@@ -123,6 +130,7 @@ class PostModel {
     String? id,
     UserModel? user,
     LocationModel? location,
+    String? title,
     String? content,
     List<String>? imageUrls,
     int? likes,
@@ -137,6 +145,7 @@ class PostModel {
       id: id ?? this.id,
       user: user ?? this.user,
       location: location ?? this.location,
+      title: title ?? this.title,
       content: content ?? this.content,
       imageUrls: imageUrls ?? this.imageUrls,
       likes: likes ?? this.likes,

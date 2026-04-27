@@ -4,9 +4,10 @@ import '../../../core/services/auth_service.dart';
 import '../../../data/datasources/remote_data_source.dart';
 import '../../../data/models/post_model.dart';
 import '../../../presentation/providers/post_provider.dart';
+import '../../../widgets/action_popover.dart';
 import '../../profile/profile_navigation.dart';
 import '../../profile/services/browsing_history_service.dart';
-import '../widgets/edit_post_sheet.dart';
+import 'edit_post_page.dart';
 import 'image_viewer_page.dart';
 
 class DetailPage extends StatefulWidget {
@@ -155,8 +156,11 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  Future<void> _openEditSheet(PostModel post) async {
-    final updated = await showEditPostSheet(context, post: post);
+  Future<void> _openEditPage(PostModel post) async {
+    final updated = await Navigator.push<PostModel>(
+      context,
+      MaterialPageRoute(builder: (_) => EditPostPage(post: post)),
+    );
     if (updated == null || !mounted) return;
     context.read<PostProvider>().updatePost(updated);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -232,44 +236,14 @@ class _DetailPageState extends State<DetailPage> {
                 icon: const Icon(Icons.share_outlined, color: Colors.black),
                 onPressed: () => _showShareSheet(context),
               ),
-              // 仅自己的 post 显示 "..." 菜单（编辑 / 删除）
+              // 仅自己的 post 显示 "..." 菜单（编辑 / 删除）。
+              // 用 [showActionPopover] 而不是 Material PopupMenuButton：
+              // 原生 PopupMenu 风格生硬、白底直角，与全 app 的 glass + 圆角
+              // 视觉不一致。ActionPopover 与 wheel_popover 同源审美。
               if (isOwn)
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz, color: Colors.black),
-                  tooltip: '更多',
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      _openEditSheet(post);
-                    } else if (value == 'delete') {
-                      _confirmDelete(post);
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem<String>(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit_outlined, size: 18),
-                          SizedBox(width: 8),
-                          Text('编辑'),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_outline,
-                            size: 18,
-                            color: Colors.red,
-                          ),
-                          SizedBox(width: 8),
-                          Text('删除', style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
-                    ),
-                  ],
+                _MoreMenuButton(
+                  onEdit: () => _openEditPage(post),
+                  onDelete: () => _confirmDelete(post),
                 ),
             ],
           ),
@@ -767,5 +741,52 @@ class _DetailPageState extends State<DetailPage> {
     } else {
       return '${time.month}月${time.day}日';
     }
+  }
+}
+
+/// AppBar `...` 按钮 + 弹出 [showActionPopover]（编辑 / 删除）。
+///
+/// 抽出来是因为 `showActionPopover` 需要一个稳定的 [GlobalKey] 锚点，
+/// 而 AppBar.actions 会在 PostProvider 更新时重建，inline 写 GlobalKey
+/// 会被频繁丢弃 / 新建。State 持有 key 解决这个问题。
+class _MoreMenuButton extends StatefulWidget {
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _MoreMenuButton({required this.onEdit, required this.onDelete});
+
+  @override
+  State<_MoreMenuButton> createState() => _MoreMenuButtonState();
+}
+
+class _MoreMenuButtonState extends State<_MoreMenuButton> {
+  final GlobalKey _anchorKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      key: _anchorKey,
+      icon: const Icon(Icons.more_horiz, color: Colors.black),
+      tooltip: '更多',
+      onPressed: () {
+        showActionPopover(
+          context: context,
+          anchorKey: _anchorKey,
+          items: [
+            ActionPopoverItem(
+              label: '编辑',
+              icon: Icons.edit_outlined,
+              onTap: widget.onEdit,
+            ),
+            ActionPopoverItem(
+              label: '删除',
+              icon: Icons.delete_outline,
+              destructive: true,
+              onTap: widget.onDelete,
+            ),
+          ],
+        );
+      },
+    );
   }
 }
