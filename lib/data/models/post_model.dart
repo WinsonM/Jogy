@@ -24,6 +24,8 @@ class PostModel {
   /// 导致 profile 看得到、map 看不到。前端用 [expireAt] 显式标记。
   final DateTime? expireAt;
 
+  bool get isExpired => expireAt != null && expireAt!.isBefore(DateTime.now());
+
   const PostModel({
     required this.id,
     required this.user,

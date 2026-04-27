@@ -172,9 +172,7 @@ class RemoteDataSource {
   Future<List<PostModel>> fetchPostsByUser(String userId) async {
     try {
       final response = await _dio.get(ApiConstants.userPosts(userId));
-      return (response.data as List)
-          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
-          .toList();
+      return _parseActivePostList(response.data);
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to load user posts');
     }
@@ -184,9 +182,7 @@ class RemoteDataSource {
   Future<List<PostModel>> fetchLikedPosts(String userId) async {
     try {
       final response = await _dio.get(ApiConstants.userLikedPosts(userId));
-      return (response.data as List)
-          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
-          .toList();
+      return _parseActivePostList(response.data);
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to load liked posts');
     }
@@ -196,12 +192,17 @@ class RemoteDataSource {
   Future<List<PostModel>> fetchFavoritedPosts(String userId) async {
     try {
       final response = await _dio.get(ApiConstants.userFavoritedPosts(userId));
-      return (response.data as List)
-          .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
-          .toList();
+      return _parseActivePostList(response.data);
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to load favorited posts');
     }
+  }
+
+  List<PostModel> _parseActivePostList(dynamic data) {
+    return (data as List)
+        .map((json) => PostModel.fromJson(json as Map<String, dynamic>))
+        .where((post) => !post.isExpired)
+        .toList();
   }
 
   // ==================== Follows ====================
