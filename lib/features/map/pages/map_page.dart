@@ -15,6 +15,7 @@ import '../../../core/map/map_types.dart';
 import '../../../core/map/map_controller.dart';
 import '../../../core/map/map_widget_builder.dart';
 import '../../../core/map/mapbox/mapbox_map_widget_builder.dart';
+import '../../../core/services/auth_service.dart';
 import '../widgets/gesture_passthrough_stack.dart';
 import '../widgets/map_bubble.dart';
 import '../widgets/post_bubbles_overlay.dart';
@@ -25,12 +26,14 @@ import '../../detail/pages/detail_page.dart';
 import '../../../presentation/providers/post_provider.dart';
 import '../../../config/map_config.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/models/user_model.dart';
 import '../../../utils/mapbox_language.dart';
 import 'package:dio/dio.dart';
 import 'search_page.dart';
 import '../../scan/pages/scan_page.dart';
 import '../../../data/datasources/remote_data_source.dart';
 import '../../profile/services/browsing_history_service.dart';
+import '../../scan/services/jogy_qr_codec.dart';
 import 'location_picker_page.dart';
 import '../../../data/models/location_model.dart';
 import '../../../widgets/center_toast.dart';
@@ -1320,24 +1323,32 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   void _showQRCodeDialog(BuildContext context) {
     final GlobalKey qrKey = GlobalKey();
+    final authService = context.read<AuthService>();
+    final cachedUser = authService.currentUser;
+    final cachedUserId = authService.currentUserId;
+    final Future<UserModel?> userFuture = cachedUser != null
+        ? Future<UserModel?>.value(cachedUser)
+        : RemoteDataSource().getCurrentUser();
 
     // 先显示 loading，异步获取真实用户数据
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return FutureBuilder(
-          future: RemoteDataSource().getCurrentUser(),
+        return FutureBuilder<UserModel?>(
+          future: userFuture,
           builder: (context, snapshot) {
             // 获取到用户数据或失败后都显示 dialog
-            final username = snapshot.data?.username ?? 'Jogy User';
-            final avatarUrl = snapshot.data?.avatarUrl ?? '';
-            final userId = snapshot.data?.id ?? '';
+            final user = snapshot.data ?? cachedUser;
+            final username = user?.username ?? 'Jogy User';
+            final avatarUrl = user?.avatarUrl ?? '';
+            final userId = (user?.id ?? cachedUserId ?? '').trim();
             final qrData = userId.isNotEmpty
-                ? 'jogy://user/profile/$userId'
-                : 'jogy://user/profile/unknown';
+                ? JogyQrCodec.userProfile(userId)
+                : null;
             final isLoading =
-                snapshot.connectionState == ConnectionState.waiting;
+                snapshot.connectionState == ConnectionState.waiting &&
+                qrData == null;
 
             return Dialog(
               shape: RoundedRectangleBorder(
@@ -1354,7 +1365,32 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                         padding: EdgeInsets.all(40.0),
                         child: CircularProgressIndicator(),
                       )
-                    else ...[
+                    else if (qrData == null) ...[
+                      const Icon(
+                        Icons.error_outline,
+                        color: Color(0xFFE57373),
+                        size: 40,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        '无法生成二维码',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '请重新登录后再试',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 24),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('关闭'),
+                      ),
+                    ] else ...[
                       RepaintBoundary(
                         key: qrKey,
                         child: Container(
