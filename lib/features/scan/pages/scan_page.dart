@@ -271,7 +271,7 @@ class _ScanPageState extends State<ScanPage> {
           ),
           // 扫描框 overlay
           Center(
-            child: Container(
+            child: SizedBox(
               width: 260,
               height: 260,
               child: Stack(

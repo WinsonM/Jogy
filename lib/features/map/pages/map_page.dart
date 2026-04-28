@@ -94,6 +94,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   // 用户位置相关
   MapLatLng? _userLocation;
   bool _locationLoading = true;
+  MapPlaceSearchResult? _selectedSearchPlace;
 
   // 记录上次已经 SnackBar 过的错误信息，避免同一错误反复 toast
   String? _lastShownError;
@@ -429,11 +430,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   Future<void> _navigateToSearch() async {
-    final result = await Navigator.push<PostModel>(
+    final result = await Navigator.push<Object?>(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const SearchPage(),
+            SearchPage(proximity: _jogyMapController?.cameraState.center),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, -1.0); // 从顶部滑入
           const end = Offset.zero;
@@ -450,34 +451,142 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       ),
     );
 
-    if (result != null && mounted && _jogyMapController != null) {
-      // 找到对应的 index
-      final posts = context.read<PostProvider>().posts;
-      final index = posts.indexWhere((p) => p.id == result.id);
+    if (!mounted || _jogyMapController == null) return;
 
-      if (index != -1) {
-        // 定位到该帖子
-        setState(() {
-          _manualExpandedIndex = index;
-          _expandedIndex = index;
-          _suppressedAutoIndex = null;
-        });
-
-        final viewportSize = _jogyMapController!.cameraState.viewportSize;
-        final offset = _expandedBubbleCenterOffset(viewportSize);
-        final target = MapLatLng(
-          result.location.latitude,
-          result.location.longitude,
-        );
-        final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
-          target,
-          16,
-          offset.dx,
-          offset.dy,
-        );
-        _jogyMapController!.moveTo(adjustedCenter, zoom: 16);
-      }
+    if (result is PostModel) {
+      await _focusSearchPost(result);
+    } else if (result is MapPlaceSearchResult) {
+      await _focusSearchPlace(result);
     }
+  }
+
+  Future<void> _focusSearchPost(PostModel post) async {
+    final controller = _jogyMapController;
+    if (controller == null) return;
+
+    // 找到对应的 index
+    final posts = context.read<PostProvider>().posts;
+    final index = posts.indexWhere((p) => p.id == post.id);
+
+    setState(() {
+      if (index != -1) {
+        _manualExpandedIndex = index;
+        _expandedIndex = index;
+      } else {
+        _manualExpandedIndex = null;
+        _expandedIndex = null;
+        _pinnedPost = post;
+        _pinnedPostAt = DateTime.now();
+      }
+      _suppressedAutoIndex = null;
+      _autoExpandDisabled = false;
+      _clusterResults = const [];
+      _postScreenPoints.clear();
+      _selectedSearchPlace = null;
+    });
+
+    const targetZoom = 16.0;
+    final viewportSize = controller.cameraState.viewportSize;
+    final offset = _expandedBubbleCenterOffset(viewportSize);
+    final target = MapLatLng(post.location.latitude, post.location.longitude);
+    final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
+      target,
+      targetZoom,
+      offset.dx,
+      offset.dy,
+    );
+
+    await controller.moveTo(adjustedCenter, zoom: targetZoom);
+    if (!mounted) return;
+    _clusterEngine.load(context.read<PostProvider>().posts);
+    await _refreshPostsForCurrentViewport();
+    await _recomputeClusters();
+  }
+
+  Future<void> _focusSearchPlace(MapPlaceSearchResult place) async {
+    final controller = _jogyMapController;
+    if (controller == null) return;
+
+    setState(() {
+      _manualExpandedIndex = null;
+      _expandedIndex = null;
+      _suppressedAutoIndex = null;
+      _autoExpandDisabled = false;
+      _clusterResults = const [];
+      _postScreenPoints.clear();
+      _selectedSearchPlace = place;
+    });
+
+    await controller.moveTo(
+      place.coordinate,
+      zoom: 16,
+      duration: Duration.zero,
+    );
+    if (!mounted) return;
+    _cameraTick.value++;
+    await _refreshPostsForCurrentViewport();
+    await _recomputeClusters();
+  }
+
+  Widget _buildSearchPlaceMarker(MapPlaceSearchResult place) {
+    final controller = _jogyMapController;
+    if (controller == null) return const SizedBox.shrink();
+
+    return ValueListenableBuilder<int>(
+      valueListenable: _cameraTick,
+      builder: (context, _, _) {
+        final pt = controller.latLngToScreenPoint(place.coordinate);
+        if (pt == null) return const SizedBox.shrink();
+
+        return Positioned(
+          left: pt.x - 88,
+          top: pt.y - 72,
+          width: 176,
+          child: IgnorePointer(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 176),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(242),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(28),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    place.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Icon(
+                  Icons.location_pin,
+                  color: Color(0xFFE84D4D),
+                  size: 34,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showAddMenu() {
@@ -1180,6 +1289,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                       scaleFactors: _scaleFactors,
                       onTap: _handleBubbleTap,
                     ),
+                  if (_selectedSearchPlace != null)
+                    _buildSearchPlaceMarker(_selectedSearchPlace!),
                 ],
               ),
             ),
@@ -1297,6 +1408,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               bottom: 150,
               child: LocationButton(
                 onTap: () {
+                  setState(() {
+                    _selectedSearchPlace = null;
+                  });
                   // 重新进入 FollowPuck 模式（跟随位置 + 朝向旋转）
                   _jogyMapController?.followUserWithHeading(zoom: 17);
                 },

@@ -18,6 +18,9 @@ class MapboxMapController implements JogyMapController {
   /// 由 wrapper 注入的回调，用于重新激活 FollowPuck viewport
   void Function({double? zoom, double? pitch})? onRequestFollowHeading;
 
+  /// 由 wrapper 注入的回调，用于退出 FollowPuck viewport。
+  Future<void> Function()? onRequestIdleViewport;
+
   /// Camera idle 事件广播
   /// 由 wrapper 在 `onMapIdleListener` 触发时调用 [emitCameraIdle]
   final StreamController<MapCameraEvent> _cameraIdleController =
@@ -54,6 +57,8 @@ class MapboxMapController implements JogyMapController {
     double? bearing,
     Duration duration = const Duration(milliseconds: 500),
   }) async {
+    await onRequestIdleViewport?.call();
+
     final cameraOptions = mapbox.CameraOptions(
       center: mapbox.Point(
         coordinates: mapbox.Position(center.longitude, center.latitude),

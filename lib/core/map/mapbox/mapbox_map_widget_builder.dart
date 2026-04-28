@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -37,6 +39,10 @@ class _MapboxMapWrapper extends StatefulWidget {
 
 class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
   MapboxMapController? _controller;
+  late final MapLatLng _initialCenter;
+  late final double _initialZoom;
+  late final double _initialPitch;
+  late final double _initialBearing;
 
   /// 当前 viewport 状态。初始为 FollowPuck（跟随用户 + 朝向旋转）。
   /// 用户手势拖动时 Mapbox SDK 自动切换为 Idle。
@@ -46,6 +52,10 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
   @override
   void initState() {
     super.initState();
+    _initialCenter = widget.options.initialCenter;
+    _initialZoom = widget.options.initialZoom;
+    _initialPitch = widget.options.initialPitch;
+    _initialBearing = widget.options.initialBearing;
     // 只有首页地图默认开启 FollowPuck（跟随位置 + 朝向旋转）
     // Profile 地图等静态场景不需要
     if (widget.options.followHeadingOnStart) {
@@ -58,9 +68,9 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
     double? pitch,
   }) {
     return mapbox.FollowPuckViewportState(
-      zoom: zoom ?? widget.options.initialZoom,
+      zoom: zoom ?? _initialZoom,
       bearing: const mapbox.FollowPuckViewportStateBearingHeading(),
-      pitch: pitch ?? widget.options.initialPitch,
+      pitch: pitch ?? _initialPitch,
     );
   }
 
@@ -72,6 +82,33 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
     });
   }
 
+  Future<void> _activateIdleMode() async {
+    if (_viewport is mapbox.IdleViewportState || !mounted) return;
+
+    final completer = Completer<void>();
+
+    setStateWithViewportAnimation(
+      () {
+        _viewport = const mapbox.IdleViewportState();
+      },
+      transition: null,
+      completion: (_) {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      },
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    return completer.future;
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
@@ -81,10 +118,10 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
   void _onMapCreated(mapbox.MapboxMap mapboxMap) {
     // 创建初始相机状态
     final initialState = MapCameraState(
-      center: widget.options.initialCenter,
-      zoom: widget.options.initialZoom,
-      pitch: widget.options.initialPitch,
-      bearing: widget.options.initialBearing,
+      center: _initialCenter,
+      zoom: _initialZoom,
+      pitch: _initialPitch,
+      bearing: _initialBearing,
       viewportSize: _readViewportSizeFallback(),
     );
 
@@ -92,6 +129,7 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
     // 注入回调：让 controller.followUserWithHeading() 能触发 viewport 切换
     _controller!.onRequestFollowHeading = _activateFollowMode;
+    _controller!.onRequestIdleViewport = _activateIdleMode;
 
     // 通知外部地图创建完成
     widget.options.onMapCreated?.call(_controller!);
@@ -211,6 +249,20 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
     return const MapScreenPoint(0, 0);
   }
 
+  mapbox.CameraOptions _cameraOptionsForBuild() {
+    final state = _controller?.cameraState;
+    final center = state?.center ?? _initialCenter;
+
+    return mapbox.CameraOptions(
+      center: mapbox.Point(
+        coordinates: mapbox.Position(center.longitude, center.latitude),
+      ),
+      zoom: state?.zoom ?? _initialZoom,
+      pitch: state?.pitch ?? _initialPitch,
+      bearing: state?.bearing ?? _initialBearing,
+    );
+  }
+
   void _onTapListener(mapbox.MapContentGestureContext context) {
     final point = context.point;
     final coords = point.coordinates;
@@ -221,18 +273,9 @@ class _MapboxMapWrapperState extends State<_MapboxMapWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    final center = widget.options.initialCenter;
-
     return mapbox.MapWidget(
       styleUri: widget.styleUri ?? mapbox.MapboxStyles.STANDARD,
-      cameraOptions: mapbox.CameraOptions(
-        center: mapbox.Point(
-          coordinates: mapbox.Position(center.longitude, center.latitude),
-        ),
-        zoom: widget.options.initialZoom,
-        pitch: widget.options.initialPitch,
-        bearing: widget.options.initialBearing,
-      ),
+      cameraOptions: _cameraOptionsForBuild(),
       viewport: _viewport,
       // 让地图参与 tap / scale 手势竞争。不要用 EagerGestureRecognizer：
       // home map 的 Flutter bubble overlay 会与 MapWidget 同时命中；Eager 会抢走
