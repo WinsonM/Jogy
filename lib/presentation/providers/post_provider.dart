@@ -228,9 +228,12 @@ class PostProvider extends ChangeNotifier {
 
     // 1. TTL 清理（在任何 fetch 路径上自动 self-heal，无需 Timer）
     final now = DateTime.now();
-    _localAdditions.removeWhere(
-      (_, e) => now.difference(e.addedAt) > _localAdditionTtl,
-    );
+    _localAdditions.removeWhere((_, e) {
+      if (e.post.isBroadcast) {
+        return e.post.isExpired;
+      }
+      return now.difference(e.addedAt) > _localAdditionTtl;
+    });
     if (_localAdditions.isEmpty) return remote;
 
     // 2. 远端已知的 id：远端权威，清掉
@@ -323,6 +326,10 @@ class PostProvider extends ChangeNotifier {
       _pendingFavoriteToggles.remove(postId);
       return;
     }
+    if (!original.canFavorite) {
+      _pendingFavoriteToggles.remove(postId);
+      return;
+    }
 
     final optimistic = original.copyWith(
       isFavorited: !original.isFavorited,
@@ -400,6 +407,40 @@ class PostProvider extends ChangeNotifier {
       if (value is bool) return value;
     }
     return fallback;
+  }
+
+  Future<CommentModel?> createComment(
+    String postId, {
+    required String content,
+    String? parentId,
+    String? replyToUserId,
+  }) async {
+    try {
+      final comment = await _repository.createComment(
+        postId,
+        content: content,
+        parentId: parentId,
+        replyToUserId: replyToUserId,
+      );
+      _appendComment(postId, comment);
+      _error = null;
+      notifyListeners();
+      return comment;
+    } catch (e, st) {
+      debugPrint('[PostProvider] createComment FAILED id=$postId: $e\n$st');
+      _error = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  void _appendComment(String postId, CommentModel comment) {
+    final post = _findPost(postId);
+    if (post == null) return;
+
+    final updatedComments = List<CommentModel>.from(post.comments)
+      ..add(comment);
+    _replacePostEverywhere(post.copyWith(comments: updatedComments));
   }
 
   Future<void> toggleCommentLike(String postId, String commentId) async {

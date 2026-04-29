@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/map/map_controller.dart';
 import '../../../core/map/map_types.dart';
 import '../../../data/models/post_model.dart';
+import 'map_broadcast_cloud.dart';
 import 'map_bubble.dart';
 
 /// 一层独立、最简的 post 气泡覆盖层。
@@ -44,6 +45,8 @@ class PostBubblesOverlay extends StatefulWidget {
   final int? expandedIndex;
   final Map<int, double> scaleFactors;
   final void Function(PostModel post, int index) onTap;
+  final void Function(PostModel post)? onBroadcastLike;
+  final void Function(PostModel post)? onBroadcastReply;
 
   const PostBubblesOverlay({
     super.key,
@@ -54,6 +57,8 @@ class PostBubblesOverlay extends StatefulWidget {
     required this.expandedIndex,
     required this.scaleFactors,
     required this.onTap,
+    this.onBroadcastLike,
+    this.onBroadcastReply,
   });
 
   @override
@@ -90,10 +95,9 @@ class _PostBubblesOverlayState extends State<PostBubblesOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    // 与原 _buildBubbleOverlay 对齐：用 expandedHeight 作为 Positioned 的方框
-    // 边长，配合 MapBubbleWidget 内部 `Align(Alignment.bottomCenter)`，
-    // 使气泡尖端正好落在 (screenPoint.x, screenPoint.y)。
-    const double w = MapBubbleWidget.expandedHeight;
+    // 气泡用 expandedHeight 作为方框边长；广播云朵用独立尺寸，但同样
+    // 以底部中心对齐地理坐标。
+    const double bubbleBoxSize = MapBubbleWidget.expandedHeight;
 
     final children = <Widget>[];
     Widget? expandedChild;
@@ -112,23 +116,35 @@ class _PostBubblesOverlayState extends State<PostBubblesOverlay> {
       }
       firstPoint ??= pt;
 
-      final isExpanded = widget.expandedIndex == i;
+      final isExpanded = widget.expandedIndex == i && post.isPhotoBubble;
       final scale = widget.scaleFactors[i] ?? 1.0;
-
-      final child = Positioned(
-        key: ValueKey('p_${post.id}'),
-        left: pt.x - w / 2,
-        top: pt.y - w,
-        width: w,
-        height: w,
-        child: MapBubbleWidget(
-          isExpanded: isExpanded,
-          scaleFactor: scale,
-          post: post,
-          mapRotation: widget.mapRotation,
-          onTap: () => widget.onTap(post, i),
-        ),
-      );
+      final child = post.isBroadcast
+          ? Positioned(
+              key: ValueKey('broadcast_${post.id}'),
+              left: pt.x - MapBroadcastCloudWidget.width / 2,
+              top: pt.y - MapBroadcastCloudWidget.height,
+              width: MapBroadcastCloudWidget.width,
+              height: MapBroadcastCloudWidget.height,
+              child: MapBroadcastCloudWidget(
+                post: post,
+                onLike: () => widget.onBroadcastLike?.call(post),
+                onReply: () => widget.onBroadcastReply?.call(post),
+              ),
+            )
+          : Positioned(
+              key: ValueKey('p_${post.id}'),
+              left: pt.x - bubbleBoxSize / 2,
+              top: pt.y - bubbleBoxSize,
+              width: bubbleBoxSize,
+              height: bubbleBoxSize,
+              child: MapBubbleWidget(
+                isExpanded: isExpanded,
+                scaleFactor: scale,
+                post: post,
+                mapRotation: widget.mapRotation,
+                onTap: () => widget.onTap(post, i),
+              ),
+            );
 
       final viewport = widget.controller.cameraState.viewportSize;
       if (pt.x >= 0 && pt.x <= viewport.x && pt.y >= 0 && pt.y <= viewport.y) {

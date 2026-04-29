@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/constants/api_constants.dart';
+import '../models/activity_notification_model.dart';
 import '../models/post_model.dart';
 import '../models/user_model.dart';
 
@@ -182,7 +183,9 @@ class RemoteDataSource {
   Future<List<PostModel>> fetchLikedPosts(String userId) async {
     try {
       final response = await _dio.get(ApiConstants.userLikedPosts(userId));
-      return _parseActivePostList(response.data);
+      return _parseActivePostList(
+        response.data,
+      ).where((post) => post.isPhotoBubble).toList();
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to load liked posts');
     }
@@ -192,7 +195,9 @@ class RemoteDataSource {
   Future<List<PostModel>> fetchFavoritedPosts(String userId) async {
     try {
       final response = await _dio.get(ApiConstants.userFavoritedPosts(userId));
-      return _parseActivePostList(response.data);
+      return _parseActivePostList(
+        response.data,
+      ).where((post) => post.isPhotoBubble).toList();
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to load favorited posts');
     }
@@ -517,6 +522,32 @@ class RemoteDataSource {
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to unfavorite post');
+    }
+  }
+
+  // ==================== Activity Notifications ====================
+
+  Future<List<ActivityNotificationModel>> fetchActivityNotifications({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.notifications,
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      final data = response.data;
+      final rawList = data is Map<String, dynamic>
+          ? data['notifications'] ?? data['items'] ?? data['data']
+          : data;
+      if (rawList is! List) return const [];
+
+      return rawList
+          .whereType<Map<String, dynamic>>()
+          .map(ActivityNotificationModel.fromJson)
+          .toList();
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load notifications');
     }
   }
 

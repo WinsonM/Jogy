@@ -1,4 +1,5 @@
 import '../../data/models/post_model.dart';
+import '../../data/models/comment_model.dart';
 
 abstract class PostRepository {
   Future<List<PostModel>> getPosts();
@@ -20,4 +21,11 @@ abstract class PostRepository {
   Future<Map<String, dynamic>> toggleLikePost(String postId);
 
   Future<Map<String, dynamic>> toggleFavoritePost(String postId);
+
+  Future<CommentModel> createComment(
+    String postId, {
+    required String content,
+    String? parentId,
+    String? replyToUserId,
+  });
 }

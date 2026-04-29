@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../domain/repositories/post_repository.dart';
+import '../models/comment_model.dart';
 import '../models/post_model.dart';
 import '../datasources/remote_data_source.dart';
 
@@ -80,5 +81,26 @@ class PostRepositoryImpl implements PostRepository {
   @override
   Future<Map<String, dynamic>> toggleFavoritePost(String postId) {
     return _remoteDataSource.toggleFavoritePost(postId);
+  }
+
+  @override
+  Future<CommentModel> createComment(
+    String postId, {
+    required String content,
+    String? parentId,
+    String? replyToUserId,
+  }) async {
+    final response = await _remoteDataSource.createComment(
+      postId,
+      content: content,
+      parentId: parentId,
+      replyToUserId: replyToUserId,
+    );
+
+    final raw = response['comment'] ?? response['data'] ?? response;
+    if (raw is Map<String, dynamic>) {
+      return CommentModel.fromJson(raw);
+    }
+    throw Exception('Invalid comment response');
   }
 }

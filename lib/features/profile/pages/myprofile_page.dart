@@ -311,7 +311,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
       _replacePostIfPresent(_favoritedPosts, change.post);
 
       if (change.isLiked != null) {
-        if (change.isLiked!) {
+        if (change.isLiked! && change.post.isPhotoBubble) {
           _upsertPost(_likedPosts, change.post);
         } else {
           _likedPosts.removeWhere((post) => post.id == change.post.id);
@@ -319,7 +319,7 @@ class _MyProfilePageState extends State<MyProfilePage> {
       }
 
       if (change.isFavorited != null) {
-        if (change.isFavorited!) {
+        if (change.isFavorited! && change.post.canFavorite) {
           _upsertPost(_favoritedPosts, change.post);
         } else {
           _favoritedPosts.removeWhere((post) => post.id == change.post.id);

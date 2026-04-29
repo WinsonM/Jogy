@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'chat_page.dart';
+import 'notifications_page.dart';
 
 // Message Model
 class MessageItem {
@@ -120,6 +121,13 @@ class _MessagePageState extends State<MessagePage>
     );
   }
 
+  void _openNotifications() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NotificationsPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
@@ -140,196 +148,201 @@ class _MessagePageState extends State<MessagePage>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.chat_bubble_outline,
-                        size: 64, color: Colors.grey[300]),
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 64,
+                      color: Colors.grey[300],
+                    ),
                     const SizedBox(height: 16),
-                    Text('暂无消息',
-                        style:
-                            TextStyle(color: Colors.grey[500], fontSize: 16)),
+                    Text(
+                      '暂无消息',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 16),
+                    ),
                   ],
                 ),
               )
             else
-            ShaderMask(
-              shaderCallback: (Rect bounds) {
-                return LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: const [
-                    Colors.transparent,
-                    Colors.white,
-                    Colors.white,
-                    Colors.transparent,
-                  ],
-                  stops: [0.0, (topPadding + 70) / bounds.height, 0.85, 1.0],
-                ).createShader(bounds);
-              },
-              blendMode: BlendMode.dstIn,
-              child: ListView.separated(
-                controller: _scrollController,
-                padding: EdgeInsets.only(
-                  top: topPadding + 80,
-                  bottom: 120,
-                  left: 16,
-                  right: 16,
-                ),
-                itemCount: _filteredMessages.length,
-                separatorBuilder: (c, i) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final item = _filteredMessages[index];
+              ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: const [
+                      Colors.transparent,
+                      Colors.white,
+                      Colors.white,
+                      Colors.transparent,
+                    ],
+                    stops: [0.0, (topPadding + 70) / bounds.height, 0.85, 1.0],
+                  ).createShader(bounds);
+                },
+                blendMode: BlendMode.dstIn,
+                child: ListView.separated(
+                  controller: _scrollController,
+                  padding: EdgeInsets.only(
+                    top: topPadding + 80,
+                    bottom: 120,
+                    left: 16,
+                    right: 16,
+                  ),
+                  itemCount: _filteredMessages.length,
+                  separatorBuilder: (c, i) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = _filteredMessages[index];
 
-                  return Slidable(
-                    key: ValueKey(item.id),
-                    controller: _controllerFor(item),
-                    // Disable automatic closing group tag to handle manually
-                    groupTag: 'message_list',
-                    endActionPane: ActionPane(
-                      motion: const DrawerMotion(),
-                      extentRatio: 0.35,
-                      children: [
-                        // Pin Button
-                        CustomSlidableAction(
-                          onPressed: (context) {
-                            _togglePin(item);
-                          },
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: _buildGlassIcon(Icons.push_pin, Colors.grey),
-                        ),
-                        // Delete Button
-                        CustomSlidableAction(
-                          onPressed: (context) {
-                            _deleteMessage(item);
-                          },
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: _buildGlassIcon(Icons.delete, Colors.red),
-                        ),
-                      ],
-                    ),
-                    child: Builder(
-                      builder: (context) {
-                        return GestureDetector(
-                          onTap: () {
-                            // If any slide is open, close it and DO NOT navigate
-                            if (_closeOpenSlidables()) {
-                              return;
-                            }
+                    return Slidable(
+                      key: ValueKey(item.id),
+                      controller: _controllerFor(item),
+                      // Disable automatic closing group tag to handle manually
+                      groupTag: 'message_list',
+                      endActionPane: ActionPane(
+                        motion: const DrawerMotion(),
+                        extentRatio: 0.35,
+                        children: [
+                          // Pin Button
+                          CustomSlidableAction(
+                            onPressed: (context) {
+                              _togglePin(item);
+                            },
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: _buildGlassIcon(Icons.push_pin, Colors.grey),
+                          ),
+                          // Delete Button
+                          CustomSlidableAction(
+                            onPressed: (context) {
+                              _deleteMessage(item);
+                            },
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: _buildGlassIcon(Icons.delete, Colors.red),
+                          ),
+                        ],
+                      ),
+                      child: Builder(
+                        builder: (context) {
+                          return GestureDetector(
+                            onTap: () {
+                              // If any slide is open, close it and DO NOT navigate
+                              if (_closeOpenSlidables()) {
+                                return;
+                              }
 
-                            // 清零该聊天的未读数
-                            setState(() {
-                              item.unreadCount = 0;
-                            });
-                            _reportUnreadCount();
+                              // 清零该聊天的未读数
+                              setState(() {
+                                item.unreadCount = 0;
+                              });
+                              _reportUnreadCount();
 
-                            // 传入清零后的全局未读总数
-                            final totalUnread = _messages.fold<int>(
-                              0,
-                              (sum, m) => sum + m.unreadCount,
-                            );
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChatPage(
-                                  userName: item.userName,
-                                  avatarUrl: item.avatarUrl,
-                                  unreadCount: totalUnread,
+                              // 传入清零后的全局未读总数
+                              final totalUnread = _messages.fold<int>(
+                                0,
+                                (sum, m) => sum + m.unreadCount,
+                              );
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatPage(
+                                    userName: item.userName,
+                                    avatarUrl: item.avatarUrl,
+                                    unreadCount: totalUnread,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              height: 80,
+                              decoration: BoxDecoration(
+                                // Grey background for pinned items
+                                color: item.isPinned
+                                    ? Colors.grey[200]
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(40),
+                                border: Border.all(
+                                  color: Colors.black12,
+                                  width: 0.5,
                                 ),
                               ),
-                            );
-                          },
-                          child: Container(
-                            height: 80,
-                            decoration: BoxDecoration(
-                              // Grey background for pinned items
-                              color: item.isPinned
-                                  ? Colors.grey[200]
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(40),
-                              border: Border.all(
-                                color: Colors.black12,
-                                width: 0.5,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const SizedBox(width: 10),
-                                Stack(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 28,
-                                      backgroundImage: NetworkImage(
-                                        item.avatarUrl,
+                              child: Row(
+                                children: [
+                                  const SizedBox(width: 10),
+                                  Stack(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 28,
+                                        backgroundImage: NetworkImage(
+                                          item.avatarUrl,
+                                        ),
                                       ),
-                                    ),
-                                    if (index < 3)
-                                      Positioned(
-                                        right: 0,
-                                        bottom: 0,
-                                        child: Container(
-                                          width: 14,
-                                          height: 14,
-                                          decoration: BoxDecoration(
-                                            color: Colors.green,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white,
-                                              width: 2,
+                                      if (index < 3)
+                                        Positioned(
+                                          right: 0,
+                                          bottom: 0,
+                                          child: Container(
+                                            width: 14,
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: Colors.green,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: Colors.white,
+                                                width: 2,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item.userName,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'This is a preview message content...',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 13,
-                                        ),
-                                      ),
                                     ],
                                   ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 20),
-                                  child: Text(
-                                    '12:00',
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                      fontSize: 12,
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.userName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'This is a preview message content...',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ),
-                              ],
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 20),
+                                    child: Text(
+                                      '12:00',
+                                      style: TextStyle(
+                                        color: Colors.grey[400],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                },
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
             // Fixed Title Button / Search Box
             Positioned(
               top: topPadding + 12,
@@ -360,6 +373,18 @@ class _MessagePageState extends State<MessagePage>
                 ],
               ),
             ),
+            Positioned(
+              top: topPadding + 12,
+              right: 16,
+              child: AnimatedOpacity(
+                opacity: _isSearching ? 0 : 1,
+                duration: const Duration(milliseconds: 200),
+                child: IgnorePointer(
+                  ignoring: _isSearching,
+                  child: _buildNotificationButton(),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -382,6 +407,38 @@ class _MessagePageState extends State<MessagePage>
             child: Container(
               color: Colors.transparent,
               child: Icon(icon, color: color, size: 24),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationButton() {
+    return GestureDetector(
+      onTap: _openNotifications,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(153),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(20),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.notifications_none,
+              color: Colors.black87,
+              size: 24,
             ),
           ),
         ),

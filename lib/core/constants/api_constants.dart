@@ -90,6 +90,10 @@ class ApiConstants {
   static String conversationRead(String convId) =>
       '$baseUrl/conversations/$convId/read';
 
+  // Activity notifications endpoints
+  static String get notifications => '$baseUrl/notifications';
+  static String notificationById(String id) => '$baseUrl/notifications/$id';
+
   // Search endpoints
   static String get searchGlobal => '$baseUrl/search/global';
 

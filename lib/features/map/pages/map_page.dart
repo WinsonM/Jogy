@@ -95,6 +95,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   MapLatLng? _userLocation;
   bool _locationLoading = true;
   MapPlaceSearchResult? _selectedSearchPlace;
+  PostModel? _replyingBroadcast;
+  final TextEditingController _broadcastReplyController =
+      TextEditingController();
+  final FocusNode _broadcastReplyFocusNode = FocusNode();
+  bool _isSendingBroadcastReply = false;
 
   // 记录上次已经 SnackBar 过的错误信息，避免同一错误反复 toast
   String? _lastShownError;
@@ -125,6 +130,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   void dispose() {
     _cameraMoveDebounce?.cancel();
     _cameraTick.dispose();
+    _broadcastReplyController.dispose();
+    _broadcastReplyFocusNode.dispose();
     super.dispose();
   }
 
@@ -301,6 +308,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       double minDistance = double.infinity;
 
       for (int i = 0; i < posts.length; i++) {
+        if (posts[i].isBroadcast) {
+          if ((_scaleFactors[i] ?? 1.0) != 1.0) {
+            needsRebuild = true;
+          }
+          _scaleFactors[i] = 1.0;
+          continue;
+        }
+
         final markerPosition = MapLatLng(
           posts[i].location.latitude,
           posts[i].location.longitude,
@@ -730,9 +745,12 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
     if (mounted) {
       setState(() {
-        if (index >= 0) {
+        if (index >= 0 && post.isPhotoBubble) {
           _manualExpandedIndex = index;
           _expandedIndex = index;
+        } else {
+          _manualExpandedIndex = null;
+          _expandedIndex = null;
         }
         _suppressedAutoIndex = null;
         _autoExpandDisabled = false;
@@ -746,7 +764,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
     const targetZoom = 17.0;
     final viewportSize = controller.cameraState.viewportSize;
-    final offset = _expandedBubbleCenterOffset(viewportSize);
+    final offset = post.isPhotoBubble
+        ? _expandedBubbleCenterOffset(viewportSize)
+        : Offset.zero;
     final target = MapLatLng(post.location.latitude, post.location.longitude);
     final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
       target,
@@ -843,6 +863,128 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
             }),
       );
     }
+  }
+
+  void _handleBroadcastLike(PostModel post) {
+    context.read<PostProvider>().toggleLike(post.id);
+  }
+
+  void _startBroadcastReply(PostModel post) {
+    setState(() {
+      _replyingBroadcast = post;
+      _broadcastReplyController.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _broadcastReplyFocusNode.requestFocus();
+    });
+  }
+
+  void _cancelBroadcastReply() {
+    setState(() {
+      _replyingBroadcast = null;
+      _broadcastReplyController.clear();
+    });
+    _broadcastReplyFocusNode.unfocus();
+  }
+
+  Future<void> _submitBroadcastReply() async {
+    final target = _replyingBroadcast;
+    final content = _broadcastReplyController.text.trim();
+    if (target == null || content.isEmpty || _isSendingBroadcastReply) return;
+
+    setState(() => _isSendingBroadcastReply = true);
+    final comment = await context.read<PostProvider>().createComment(
+      target.id,
+      content: content,
+      replyToUserId: target.user.id,
+    );
+    if (!mounted) return;
+
+    setState(() => _isSendingBroadcastReply = false);
+    if (comment == null) {
+      showCenterToast(context, message: '回复失败');
+      return;
+    }
+
+    _cancelBroadcastReply();
+    showCenterToast(context, message: '已回复');
+  }
+
+  Widget _buildBroadcastReplyComposer() {
+    final target = _replyingBroadcast;
+    if (target == null) return const SizedBox.shrink();
+
+    final bottom = MediaQuery.of(context).viewInsets.bottom + 92;
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: bottom,
+      child: Material(
+        color: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(235),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.black.withAlpha(18)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(24),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: '取消',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: _cancelBroadcastReply,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _broadcastReplyController,
+                      focusNode: _broadcastReplyFocusNode,
+                      minLines: 1,
+                      maxLines: 3,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _submitBroadcastReply(),
+                      decoration: InputDecoration(
+                        hintText: '回复 ${target.user.username}',
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: '发送',
+                    visualDensity: VisualDensity.compact,
+                    icon: _isSendingBroadcastReply
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send_rounded, size: 20),
+                    onPressed: _isSendingBroadcastReply
+                        ? null
+                        : _submitBroadcastReply,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // 地图相机移动回调
@@ -952,9 +1094,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     final consumed =
         pinned != null &&
         results.any((r) => r is SinglePoint && r.post.id == pinned.id);
-    final expired =
-        pinnedAt != null &&
-        DateTime.now().difference(pinnedAt) > _pinnedPostTtl;
+    final expired = pinned != null && pinned.isBroadcast
+        ? pinned.isExpired
+        : pinnedAt != null &&
+              DateTime.now().difference(pinnedAt) > _pinnedPostTtl;
 
     setState(() {
       _clusterResults = results;
@@ -1288,6 +1431,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                       expandedIndex: _expandedIndex,
                       scaleFactors: _scaleFactors,
                       onTap: _handleBubbleTap,
+                      onBroadcastLike: _handleBroadcastLike,
+                      onBroadcastReply: _startBroadcastReply,
                     ),
                   if (_selectedSearchPlace != null)
                     _buildSearchPlaceMarker(_selectedSearchPlace!),
@@ -1416,6 +1561,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 },
               ),
             ),
+            if (_replyingBroadcast != null) _buildBroadcastReplyComposer(),
             // 小型 loading 徽标：定位中或首次 posts 加载中，右上角显示
             // 放在最后以保证在工具栏之上
             if (_locationLoading ||
@@ -1643,7 +1789,7 @@ class _MessageSheetContent extends StatefulWidget {
 
 class _MessageSheetContentState extends State<_MessageSheetContent> {
   bool _isImageMode = true; // true = 图片模式, false = 文字模式
-  String _selectedDuration = '永久'; // 留存时长
+  String _selectedDuration = '30分钟'; // 留存时长
   final GlobalKey _durationChipKey = GlobalKey(); // popover anchor
 
   // Post publish state
@@ -1794,6 +1940,12 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
       ).showSnackBar(const SnackBar(content: Text('请输入内容')));
       return;
     }
+    if (_isImageMode && _selectedPostImages.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请添加照片，或切换为广播')));
+      return;
+    }
     if (_currentLocation == null) {
       ScaffoldMessenger.of(
         context,
@@ -1810,7 +1962,7 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
       // 1. Upload images in parallel
       debugPrint('[_handlePublish] uploading images...');
       List<String> mediaUrls = [];
-      if (_selectedPostImages.isNotEmpty) {
+      if (_isImageMode && _selectedPostImages.isNotEmpty) {
         final uploadFutures = _selectedPostImages
             .map((file) => remote.uploadImage(file.path))
             .toList();
@@ -1820,7 +1972,7 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
 
       // 2. Create the post
       final postType = _isImageMode ? 'bubble' : 'broadcast';
-      final title = _titleController.text.trim();
+      final title = _isImageMode ? _titleController.text.trim() : '';
       final expireAt = _durationToExpireAt(_selectedDuration);
 
       debugPrint('[_handlePublish] calling createPost...');
@@ -1831,7 +1983,7 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
         postType: postType,
         title: title.isNotEmpty ? title : null,
         addressName: _currentLocation!.placeName ?? _currentLocation!.address,
-        mediaUrls: mediaUrls.isNotEmpty ? mediaUrls : null,
+        mediaUrls: _isImageMode && mediaUrls.isNotEmpty ? mediaUrls : null,
         expireAt: expireAt,
       );
       debugPrint('[_handlePublish] createPost OK, id=${newPost.id}');

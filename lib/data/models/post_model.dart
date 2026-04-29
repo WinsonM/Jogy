@@ -30,6 +30,14 @@ class PostModel {
 
   bool get isExpired => expireAt != null && expireAt!.isBefore(DateTime.now());
 
+  /// 广播：无照片的地图短讯息。显示为云朵，不进入收藏/喜欢列表。
+  bool get isBroadcast => imageUrls.isEmpty;
+
+  /// 气泡：包含照片的长期讯息。沿用照片气泡视觉与收藏能力。
+  bool get isPhotoBubble => imageUrls.isNotEmpty;
+
+  bool get canFavorite => isPhotoBubble;
+
   const PostModel({
     required this.id,
     required this.user,
