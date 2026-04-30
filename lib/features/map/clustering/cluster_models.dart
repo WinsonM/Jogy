@@ -7,22 +7,21 @@ import '../../../data/models/post_model.dart';
 class ClusterConfig {
   /// 聚合像素半径：屏幕距离 < 此值的点合并为一个 cluster
   ///
-  /// Mapbox 默认 50px。Jogy 未展开气泡 `collapsedSize=60px`，
-  /// 设 80px 让未聚合的气泡之间有 20px 视觉间距。
+  /// Jogy 未展开气泡 `collapsedSize=60px`。默认半径略大于气泡本体，
+  /// 近距离下主要聚合同楼/视觉上明显重叠的内容，避免街区级点位被过早吞掉。
   final double clusterRadiusPx;
 
   /// 缩放阈值：zoom > 此值不再聚合，全部显示为单点
   ///
-  /// Mapbox 默认 `source.maxzoom - 1`（约 14）。Jogy 设 16，
-  /// 因为 zoom 16 已经是街区级别，用户期望看到所有气泡。
+  /// Jogy 默认 zoom 17，仍需要对热点区域聚合，直到用户明确点开。
   final int clusterMaxZoom;
 
   /// 形成 cluster 所需最少点数。Mapbox 默认 2。
   final int clusterMinPoints;
 
   const ClusterConfig({
-    this.clusterRadiusPx = 80,
-    this.clusterMaxZoom = 16,
+    this.clusterRadiusPx = 72,
+    this.clusterMaxZoom = 18,
     this.clusterMinPoints = 2,
   });
 }

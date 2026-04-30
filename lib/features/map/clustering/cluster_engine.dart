@@ -2,6 +2,7 @@ import 'package:supercluster/supercluster.dart';
 
 import '../../../core/map/map_types.dart';
 import '../../../data/models/post_model.dart';
+import 'close_post_grouping.dart';
 import 'cluster_models.dart';
 
 /// 聚合算法接口
@@ -27,6 +28,13 @@ abstract class ClusterEngine {
   /// 用于点击 cluster 时的 "smart zoom"：比 `currentZoom + 2` 更精确，
   /// 恰好让此 cluster 在目标 zoom 下分裂成单点或更小的 cluster。
   double getClusterExpansionZoom(ClusterNode cluster);
+
+  /// 返回聚合内的原始 posts，用于点击 cluster 后的列表/展开预览。
+  List<PostModel> getClusterLeaves(
+    ClusterNode cluster, {
+    int limit = 20,
+    int offset = 0,
+  });
 }
 
 /// 基于 `supercluster` package（Mapbox JS 同源算法的 Dart port）的实现
@@ -107,6 +115,26 @@ class SuperclusterEngine implements ClusterEngine {
     } catch (_) {
       // cluster 可能已因 reload 失效，兜底返回 maxZoom+1（保证能完全展开）
       return config.clusterMaxZoom.toDouble() + 1;
+    }
+  }
+
+  @override
+  List<PostModel> getClusterLeaves(
+    ClusterNode cluster, {
+    int limit = 20,
+    int offset = 0,
+  }) {
+    final index = _index;
+    if (index == null) return const [];
+    try {
+      final posts = index
+          .pointsWithin(cluster.clusterId, limit: cluster.count, offset: 0)
+          .map((point) => point.originalPoint)
+          .toList();
+      posts.sort(comparePostsByMapRecommendation);
+      return posts.skip(offset).take(limit).toList();
+    } catch (_) {
+      return const [];
     }
   }
 }

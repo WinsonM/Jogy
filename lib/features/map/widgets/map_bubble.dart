@@ -13,9 +13,8 @@ import '../clustering/cluster_models.dart';
 // [post] 与 [cluster] **互斥**：必须且仅有一个非空。
 class MapBubbleWidget extends StatelessWidget {
   static const double collapsedSize = 60.0;
-  static const double expandedSize = 280.0;
-  static const double expandedHeightFactor = 1.2;
-  static const double expandedHeight = expandedSize * expandedHeightFactor;
+  static const double expandedSize = 288.0;
+  static const double expandedHeight = 348.0;
   static const double arrowHeight = 15.0;
 
   final bool isExpanded;
@@ -80,7 +79,7 @@ class MapBubbleWidget extends StatelessWidget {
                 CustomPaint(
                   size: Size(baseSize, bubbleHeight),
                   painter: BubblePainter(
-                    color: _bubbleColor(),
+                    color: _bubbleColor(effectiveExpanded),
                     isExpanded: effectiveExpanded,
                   ),
                 ),
@@ -120,8 +119,11 @@ class MapBubbleWidget extends StatelessWidget {
     );
   }
 
-  /// 气泡主色：cluster 按数量分级，单点沿用原本的蓝色
-  Color _bubbleColor() {
+  /// 气泡主色：cluster 按数量分级；单点展开态使用白色内容卡片。
+  Color _bubbleColor(bool effectiveExpanded) {
+    if (effectiveExpanded) {
+      return const Color(0xF2FFFFFF);
+    }
     if (_isCluster) {
       final n = cluster!.count;
       if (n < 10) return const Color(0xCC3FAAF0); // 蓝（同单点，稍高不透明度）
@@ -191,8 +193,9 @@ class MapBubbleWidget extends StatelessWidget {
     final imageUrl = p.imageUrls.isNotEmpty ? p.imageUrls[0] : null;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 22), // 底部减少以平衡上下空间
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: ClipRRect(
@@ -215,57 +218,105 @@ class MapBubbleWidget extends StatelessWidget {
                     ),
             ),
           ),
-          const SizedBox(height: 6), // 减少间距
-          // 底部：左边用户头像，右边 like 和 star 按钮
+          const SizedBox(height: 8),
           Consumer<PostProvider>(
             builder: (context, postProvider, child) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // 左边：用户头像
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundImage: NetworkImage(p.user.avatarUrl),
-                      onBackgroundImageError: (_, __) {},
+              final currentPost = postProvider.posts.firstWhere(
+                (candidate) => candidate.id == p.id,
+                orElse: () => p,
+              );
+              return Row(
+                children: [
+                  CircleAvatar(
+                    radius: 15,
+                    backgroundImage: currentPost.user.avatarUrl.isNotEmpty
+                        ? NetworkImage(currentPost.user.avatarUrl)
+                        : null,
+                    onBackgroundImageError: (_, __) {},
+                    child: currentPost.user.avatarUrl.isEmpty
+                        ? const Icon(Icons.person, size: 16)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      currentPost.user.username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF27313A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    // 右边：like 和 star 按钮横向排列
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Like 按钮
-                        GestureDetector(
-                          onTap: () {
-                            postProvider.toggleLike(p.id);
-                          },
-                          child: Icon(
-                            p.isLiked ? Icons.favorite : Icons.favorite_border,
+                  ),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => postProvider.toggleLike(currentPost.id),
+                    child: SizedBox(
+                      height: 32,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            currentPost.isLiked
+                                ? Icons.favorite
+                                : Icons.favorite_border,
                             size: 22,
-                            color: p.isLiked ? Colors.red : Colors.black54,
+                            color: currentPost.isLiked
+                                ? const Color(0xFFE84D4D)
+                                : Colors.black45,
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Star 按钮
-                        GestureDetector(
-                          onTap: () {
-                            postProvider.toggleFavorite(p.id);
-                          },
-                          child: Icon(
-                            p.isFavorited ? Icons.star : Icons.star_border,
-                            size: 22,
-                            color: p.isFavorited
-                                ? Colors.amber
-                                : Colors.black54,
-                          ),
-                        ),
-                      ],
+                          if (currentPost.likes > 0) ...[
+                            const SizedBox(width: 3),
+                            Text(
+                              '${currentPost.likes}',
+                              style: const TextStyle(
+                                color: Colors.black54,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => postProvider.toggleFavorite(currentPost.id),
+                    child: SizedBox(
+                      height: 32,
+                      child: Icon(
+                        currentPost.isFavorited
+                            ? Icons.star
+                            : Icons.star_border,
+                        size: 24,
+                        color: currentPost.isFavorited
+                            ? Colors.amber
+                            : Colors.black45,
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
           ),
+          if (p.content.trim().isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(
+              p.content.trim(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF27313A),
+                fontSize: 14,
+                height: 1.18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );

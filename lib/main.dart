@@ -8,6 +8,7 @@ import 'data/datasources/remote_data_source.dart';
 import 'data/repositories/post_repository_impl.dart';
 import 'features/auth/pages/login_page.dart';
 import 'features/home/home_wrapper.dart';
+import 'presentation/providers/notification_provider.dart';
 import 'presentation/providers/post_provider.dart';
 
 void main() async {
@@ -29,6 +30,10 @@ void main() async {
           create: (_) => PostProvider(
             PostRepositoryImpl(remoteDataSource: remoteDataSource),
           ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              NotificationProvider(remoteDataSource: remoteDataSource),
         ),
       ],
       child: const MyApp(),

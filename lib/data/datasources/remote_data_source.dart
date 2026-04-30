@@ -375,7 +375,7 @@ class RemoteDataSource {
     required double minLongitude,
     required double maxLatitude,
     required double maxLongitude,
-    int limit = 50,
+    int limit = 100,
     int offset = 0,
   }) async {
     try {
@@ -527,7 +527,7 @@ class RemoteDataSource {
 
   // ==================== Activity Notifications ====================
 
-  Future<List<ActivityNotificationModel>> fetchActivityNotifications({
+  Future<ActivityNotificationPage> fetchNotifications({
     int limit = 50,
     int offset = 0,
   }) async {
@@ -537,17 +537,51 @@ class RemoteDataSource {
         queryParameters: {'limit': limit, 'offset': offset},
       );
       final data = response.data;
-      final rawList = data is Map<String, dynamic>
-          ? data['notifications'] ?? data['items'] ?? data['data']
-          : data;
-      if (rawList is! List) return const [];
-
-      return rawList
-          .whereType<Map<String, dynamic>>()
-          .map(ActivityNotificationModel.fromJson)
-          .toList();
+      if (data is Map<String, dynamic>) {
+        return ActivityNotificationPage.fromJson(data);
+      }
+      throw Exception('Invalid notifications response');
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to load notifications');
+    }
+  }
+
+  Future<List<ActivityNotificationModel>> fetchActivityNotifications({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    return (await fetchNotifications(
+      limit: limit,
+      offset: offset,
+    )).notifications;
+  }
+
+  Future<int> fetchNotificationUnreadCount() async {
+    try {
+      final response = await _dio.get(ApiConstants.notificationsUnreadCount);
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return data['unread_count'] as int? ?? data['unreadCount'] as int? ?? 0;
+      }
+      throw Exception('Invalid notification unread response');
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to load notification unread count');
+    }
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    try {
+      await _dio.patch(ApiConstants.notificationRead(id));
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to mark notification as read');
+    }
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    try {
+      await _dio.post(ApiConstants.notificationsReadAll);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to mark notifications as read');
     }
   }
 

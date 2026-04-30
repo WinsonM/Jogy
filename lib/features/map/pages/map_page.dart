@@ -20,6 +20,7 @@ import '../widgets/gesture_passthrough_stack.dart';
 import '../widgets/map_bubble.dart';
 import '../widgets/post_bubbles_overlay.dart';
 import '../widgets/zoom_arc_control.dart';
+import '../clustering/close_post_grouping.dart';
 import '../clustering/cluster_engine.dart';
 import '../clustering/cluster_models.dart';
 import '../../detail/pages/detail_page.dart';
@@ -49,16 +50,19 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   JogyMapController? _jogyMapController;
 
-  int? _expandedIndex; // Currently expanded bubble (auto or manual)
-  int? _manualExpandedIndex; // Track user manual click
-  int? _suppressedAutoIndex; // Prevent immediate auto re-expand after collapse
+  String? _expandedPostId; // Currently expanded bubble (auto or manual)
+  String? _manualExpandedPostId; // Track user manual click
+  // Prevent immediate auto re-expand after collapse.
+  String? _suppressedAutoPostId;
+  MapLatLng? _manualExpandedAnchor;
+  double? _manualExpandedZoom;
   bool _autoExpandDisabled = false; // Disable auto-expand until user drags
   double _mapRotation = 0.0; // 地图旋转角度（弧度）
   double _currentZoom = 17.0; // 当前缩放级别，默认为 17.0（两条街尺度，3D 建筑清晰）
   bool _isViewportReady = false; // 是否已拿到有效地图视口尺寸
 
   // Cache scale factors for each marker
-  final Map<int, double> _scaleFactors = {};
+  final Map<String, double> _scaleFactors = {};
 
   // 精确的真实屏幕坐标缓存（使用原生 Mapbox SDK 异步映射）
   // 键：`p_<postId>` 单点 / `c_<clusterId>` 聚合（= ClusterOrPoint.id）
@@ -280,8 +284,27 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     return Offset(0, targetTip.dy - screenCenterY);
   }
 
+  void _setManualExpandedPost(PostModel post, {double? lockZoom}) {
+    _manualExpandedPostId = post.id;
+    _expandedPostId = post.id;
+    _manualExpandedAnchor = MapLatLng(
+      post.location.latitude,
+      post.location.longitude,
+    );
+    _manualExpandedZoom = lockZoom ?? _jogyMapController?.cameraState.zoom;
+  }
+
+  void _clearExpandedPost({bool suppressCurrent = false}) {
+    final collapsedPostId = _expandedPostId;
+    _manualExpandedPostId = null;
+    _expandedPostId = null;
+    _manualExpandedAnchor = null;
+    _manualExpandedZoom = null;
+    _suppressedAutoPostId = suppressCurrent ? collapsedPostId : null;
+  }
+
   // 自动展开选择最靠近屏幕中心的 bubble；所有 bubble 保持固定尺寸。
-  void _updateScaleFactors() {
+  void _updateScaleFactors({bool allowAutoExpand = false}) {
     try {
       final controller = _jogyMapController;
       if (controller == null) return;
@@ -291,7 +314,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       if (vw == 0 || vh == 0) return;
       final viewportSize = state.viewportSize;
 
-      final posts = context.read<PostProvider>().posts;
+      final items = _currentRenderItems();
+      final livePostIds = <String>{
+        for (final item in items)
+          if (item is SinglePoint) item.post.id,
+      };
 
       // 自动展开的判定中心与点击居中的尖角目标一致，
       // 只依赖屏幕尺寸，不依赖底部导航栏高度。
@@ -302,23 +329,26 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       bool needsRebuild = false;
       bool suppressedStillEligible = false;
 
-      // Auto-expansion threshold: 30% of screen width (increased for easier triggering)
-      final expansionThreshold = vw * 0.30;
-      int? closestIndex;
+      final expansionThreshold = math.min(vw * 0.22, 180.0);
+      _AutoExpandCandidate? closest;
       double minDistance = double.infinity;
+      final candidates = <_AutoExpandCandidate>[];
+      final hasCluster = items.any((item) => item is ClusterNode);
 
-      for (int i = 0; i < posts.length; i++) {
-        if (posts[i].isBroadcast) {
-          if ((_scaleFactors[i] ?? 1.0) != 1.0) {
+      for (final item in items) {
+        if (item is! SinglePoint) continue;
+        final post = item.post;
+        if (post.isBroadcast) {
+          if ((_scaleFactors[post.id] ?? 1.0) != 1.0) {
             needsRebuild = true;
           }
-          _scaleFactors[i] = 1.0;
+          _scaleFactors[post.id] = 1.0;
           continue;
         }
 
         final markerPosition = MapLatLng(
-          posts[i].location.latitude,
-          posts[i].location.longitude,
+          post.location.latitude,
+          post.location.longitude,
         );
 
         // Get marker's screen position (this is the bubble tip location)
@@ -334,37 +364,71 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         // Track closest bubble within threshold
         // 使用纯距离判断,不依赖 dy 带状检查,以支持地图旋转
         final isEligible = distance < expansionThreshold;
+        final candidate = _AutoExpandCandidate(
+          post: post,
+          distance: distance,
+          point: markerPoint,
+        );
+        candidates.add(candidate);
         if (isEligible) {
-          if (i == _suppressedAutoIndex) {
+          if (post.id == _suppressedAutoPostId) {
             suppressedStillEligible = true;
           } else if (distance < minDistance) {
             minDistance = distance;
-            closestIndex = i;
+            closest = candidate;
           }
         }
 
         // 所有未展开 bubble 同一固定尺寸，不再随距 focus 距离衰减。
         // 老的 0.3→1.0 放射衰减会让不同屏幕位置的 bubble 大小和
         // 主体到尖角的视觉距离不一致。
-        if ((_scaleFactors[i] ?? 1.0) != 1.0) {
+        if ((_scaleFactors[post.id] ?? 1.0) != 1.0) {
           needsRebuild = true;
         }
-        _scaleFactors[i] = 1.0;
+        _scaleFactors[post.id] = 1.0;
+      }
+      _scaleFactors.removeWhere((postId, _) => !livePostIds.contains(postId));
+
+      if (_suppressedAutoPostId != null && !suppressedStillEligible) {
+        _suppressedAutoPostId = null;
       }
 
-      if (_suppressedAutoIndex != null && !suppressedStillEligible) {
-        _suppressedAutoIndex = null;
-      }
-
-      // Auto-expand logic
-      if (_manualExpandedIndex == null && !_autoExpandDisabled) {
-        if (closestIndex != _expandedIndex) {
-          _expandedIndex = closestIndex;
+      if (_manualExpandedPostId != null) {
+        if (livePostIds.contains(_manualExpandedPostId)) {
+          if (_expandedPostId != _manualExpandedPostId) {
+            _expandedPostId = _manualExpandedPostId;
+            needsRebuild = true;
+          }
+        } else {
+          _clearExpandedPost();
           needsRebuild = true;
         }
-      } else if (_manualExpandedIndex != null) {
-        if (_expandedIndex != _manualExpandedIndex) {
-          _expandedIndex = _manualExpandedIndex;
+      } else if (hasCluster || _isDenseScreen(candidates)) {
+        if (_expandedPostId != null) {
+          _expandedPostId = null;
+          needsRebuild = true;
+        }
+      } else if (allowAutoExpand && !_autoExpandDisabled) {
+        _AutoExpandCandidate? current;
+        for (final candidate in candidates) {
+          if (candidate.post.id == _expandedPostId) {
+            current = candidate;
+            break;
+          }
+        }
+        String? nextId = _expandedPostId;
+
+        if (closest == null) {
+          nextId = null;
+        } else if (current == null) {
+          nextId = closest.post.id;
+        } else if (closest.post.id != current.post.id &&
+            closest.distance + 48 < current.distance) {
+          nextId = closest.post.id;
+        }
+
+        if (nextId != _expandedPostId) {
+          _expandedPostId = nextId;
           needsRebuild = true;
         }
       }
@@ -373,8 +437,50 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         setState(() {});
       }
     } catch (e) {
-      print('Scale update error: $e');
+      debugPrint('Scale update error: $e');
     }
+  }
+
+  bool _isDenseScreen(List<_AutoExpandCandidate> candidates) {
+    if (candidates.length < 2) return false;
+    const minGap = MapBubbleWidget.collapsedSize + 28;
+    for (var i = 0; i < candidates.length; i++) {
+      for (var j = i + 1; j < candidates.length; j++) {
+        final dx = candidates[i].point.x - candidates[j].point.x;
+        final dy = candidates[i].point.y - candidates[j].point.y;
+        if (math.sqrt(dx * dx + dy * dy) < minGap) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool _manualExpandedMovedTooFar() {
+    final controller = _jogyMapController;
+    final anchor = _manualExpandedAnchor;
+    if (controller == null || anchor == null) return true;
+
+    final state = controller.cameraState;
+    final viewport = state.viewportSize;
+    if (viewport.x <= 0 || viewport.y <= 0) return false;
+
+    final pt = controller.latLngToScreenPoint(anchor);
+    if (pt == null) return true;
+
+    final zoomDelta = (state.zoom - (_manualExpandedZoom ?? state.zoom)).abs();
+    if (zoomDelta > 0.65) return true;
+
+    final focus = _expandedBubbleTipTarget(viewport);
+    final dx = pt.x - focus.dx;
+    final dy = pt.y - focus.dy;
+    final maxDistance = math.min(viewport.x, viewport.y) * 0.42;
+    final outsideViewport =
+        pt.x < -80 ||
+        pt.x > viewport.x + 80 ||
+        pt.y < -80 ||
+        pt.y > viewport.y + 80;
+    return outsideViewport || math.sqrt(dx * dx + dy * dy) > maxDistance;
   }
 
   // 异步获取 Mapbox 引擎底层原生坐标（完美贴合 3D Pitch 和偏航）
@@ -437,11 +543,80 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
   }
 
-  /// 当前应渲染的条目列表：优先 cluster 结果，未就绪时 posts 全量单点
+  /// 当前应渲染的单点/数字聚合条目。近距离翻页 group 会从这里排除，
+  /// 避免同一批 post 同时显示数字聚合和翻页气泡。
   List<ClusterOrPoint> _currentRenderItems() {
-    if (_clusterResults.isNotEmpty) return _clusterResults;
     final posts = Provider.of<PostProvider>(context, listen: false).posts;
-    return posts.map<ClusterOrPoint>(SinglePoint.new).toList();
+    return _buildRenderData(posts).items;
+  }
+
+  _MapRenderData _buildRenderData(List<PostModel> livePosts) {
+    final baseItems = _clusterResults.isNotEmpty
+        ? List<ClusterOrPoint>.from(_clusterResults)
+        : livePosts.map<ClusterOrPoint>(SinglePoint.new).toList();
+
+    if (!shouldUseClosePostGrouping(
+      _jogyMapController?.cameraState.zoom ?? _currentZoom,
+    )) {
+      final items = List<ClusterOrPoint>.from(baseItems);
+      _appendPinnedPost(items);
+      _sortExpandedItemToTop(items);
+      return _MapRenderData(items: items, multiPostGroups: const []);
+    }
+
+    final liveById = {for (final post in livePosts) post.id: post};
+    final pinnedId = _pinnedPost?.id;
+    final flattenedPosts = <String, PostModel>{};
+
+    for (final item in baseItems) {
+      if (item is SinglePoint) {
+        if (item.post.id != pinnedId) {
+          flattenedPosts[item.post.id] = liveById[item.post.id] ?? item.post;
+        }
+      } else if (item is ClusterNode) {
+        final leaves = _clusterEngine.getClusterLeaves(item, limit: item.count);
+        for (final leaf in leaves) {
+          if (leaf.id != pinnedId) {
+            flattenedPosts[leaf.id] = liveById[leaf.id] ?? leaf;
+          }
+        }
+      }
+    }
+
+    final groups = buildClosePostGroups(flattenedPosts.values);
+    final items = <ClusterOrPoint>[
+      for (final group in groups)
+        if (group.totalCount == 1) SinglePoint(group.posts.first),
+    ];
+    final multiPostGroups = [
+      for (final group in groups)
+        if (group.totalCount > 1) group,
+    ];
+
+    _appendPinnedPost(items);
+    _sortExpandedItemToTop(items);
+    return _MapRenderData(items: items, multiPostGroups: multiPostGroups);
+  }
+
+  void _appendPinnedPost(List<ClusterOrPoint> items) {
+    final pinned = _pinnedPost;
+    if (pinned != null &&
+        !items.any(
+          (item) => item is SinglePoint && item.post.id == pinned.id,
+        )) {
+      items.add(SinglePoint(pinned));
+    }
+  }
+
+  void _sortExpandedItemToTop(List<ClusterOrPoint> items) {
+    if (_expandedPostId == null) return;
+    items.sort((a, b) {
+      final aIsExpanded = a is SinglePoint && a.post.id == _expandedPostId;
+      final bIsExpanded = b is SinglePoint && b.post.id == _expandedPostId;
+      if (aIsExpanded && !bIsExpanded) return 1;
+      if (!aIsExpanded && bIsExpanded) return -1;
+      return 0;
+    });
   }
 
   Future<void> _navigateToSearch() async {
@@ -479,28 +654,27 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     final controller = _jogyMapController;
     if (controller == null) return;
 
-    // 找到对应的 index
     final posts = context.read<PostProvider>().posts;
     final index = posts.indexWhere((p) => p.id == post.id);
+    const targetZoom = 16.0;
 
     setState(() {
-      if (index != -1) {
-        _manualExpandedIndex = index;
-        _expandedIndex = index;
+      if (post.isPhotoBubble) {
+        _setManualExpandedPost(post, lockZoom: targetZoom);
       } else {
-        _manualExpandedIndex = null;
-        _expandedIndex = null;
+        _clearExpandedPost();
+      }
+      if (index == -1) {
         _pinnedPost = post;
         _pinnedPostAt = DateTime.now();
       }
-      _suppressedAutoIndex = null;
+      _suppressedAutoPostId = null;
       _autoExpandDisabled = false;
       _clusterResults = const [];
       _postScreenPoints.clear();
       _selectedSearchPlace = null;
     });
 
-    const targetZoom = 16.0;
     final viewportSize = controller.cameraState.viewportSize;
     final offset = _expandedBubbleCenterOffset(viewportSize);
     final target = MapLatLng(post.location.latitude, post.location.longitude);
@@ -523,9 +697,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     if (controller == null) return;
 
     setState(() {
-      _manualExpandedIndex = null;
-      _expandedIndex = null;
-      _suppressedAutoIndex = null;
+      _clearExpandedPost();
+      _suppressedAutoPostId = null;
       _autoExpandDisabled = false;
       _clusterResults = const [];
       _postScreenPoints.clear();
@@ -740,19 +913,15 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   Future<void> _focusPublishedPost(PostModel post) async {
-    final posts = context.read<PostProvider>().posts;
-    final index = posts.indexWhere((p) => p.id == post.id);
-
+    const targetZoom = 17.0;
     if (mounted) {
       setState(() {
-        if (index >= 0 && post.isPhotoBubble) {
-          _manualExpandedIndex = index;
-          _expandedIndex = index;
+        if (post.isPhotoBubble) {
+          _setManualExpandedPost(post, lockZoom: targetZoom);
         } else {
-          _manualExpandedIndex = null;
-          _expandedIndex = null;
+          _clearExpandedPost();
         }
-        _suppressedAutoIndex = null;
+        _suppressedAutoPostId = null;
         _autoExpandDisabled = false;
         _clusterResults = const [];
         _postScreenPoints.clear();
@@ -762,7 +931,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     final controller = _jogyMapController;
     if (controller == null) return;
 
-    const targetZoom = 17.0;
     final viewportSize = controller.cameraState.viewportSize;
     final offset = post.isPhotoBubble
         ? _expandedBubbleCenterOffset(viewportSize)
@@ -823,8 +991,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   /// 处理气泡点击：collapsed → 展开 + 移动相机；expanded → 进详情页。
   /// 抽出来给 [PostBubblesOverlay] 复用，不再依赖 _buildBubbleOverlay 内部闭包。
-  void _handleBubbleTap(PostModel post, int index) {
-    final isExpanded = _expandedIndex == index;
+  void _handlePostTap(PostModel post) {
+    final isExpanded = _expandedPostId == post.id && post.isPhotoBubble;
     if (isExpanded) {
       Navigator.push(
         context,
@@ -834,25 +1002,31 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
 
     BrowsingHistoryService().addToHistory(post);
+    const targetZoom = 16.0;
     setState(() {
-      _manualExpandedIndex = index;
-      _expandedIndex = index;
-      _suppressedAutoIndex = null;
+      if (post.isPhotoBubble) {
+        _setManualExpandedPost(post, lockZoom: targetZoom);
+      } else {
+        _clearExpandedPost();
+      }
+      _suppressedAutoPostId = null;
     });
     final controller = _jogyMapController;
     if (controller != null) {
       final viewportSize = controller.cameraState.viewportSize;
-      final offset = _expandedBubbleCenterOffset(viewportSize);
+      final offset = post.isPhotoBubble
+          ? _expandedBubbleCenterOffset(viewportSize)
+          : Offset.zero;
       final target = MapLatLng(post.location.latitude, post.location.longitude);
       final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
         target,
-        16,
+        targetZoom,
         offset.dx,
         offset.dy,
       );
       unawaited(
         controller
-            .moveTo(adjustedCenter, zoom: 16)
+            .moveTo(adjustedCenter, zoom: targetZoom)
             .then((_) {
               if (mounted) {
                 _cameraTick.value++;
@@ -862,6 +1036,50 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               debugPrint('[MapPage] bubble moveTo failed: $e\n$st');
             }),
       );
+    }
+  }
+
+  void _openPostDetail(PostModel post) {
+    BrowsingHistoryService().addToHistory(post);
+    setState(() => _clearExpandedPost());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (c) => DetailPage(postId: post.id)),
+    );
+  }
+
+  void _handleClusterTap(ClusterNode cluster) {
+    setState(() {
+      _clearExpandedPost();
+      _autoExpandDisabled = true;
+      _selectedSearchPlace = null;
+    });
+    unawaited(_zoomIntoCluster(cluster));
+  }
+
+  Future<void> _zoomIntoCluster(ClusterNode cluster) async {
+    final controller = _jogyMapController;
+    if (controller == null) return;
+
+    final currentZoom = controller.cameraState.zoom;
+    final expansionZoom = _clusterEngine.getClusterExpansionZoom(cluster);
+    final targetZoom = math.min(
+      19.0,
+      expansionZoom <= currentZoom ? currentZoom + 1.0 : expansionZoom,
+    );
+
+    try {
+      await controller.moveTo(
+        cluster.center,
+        zoom: targetZoom,
+        duration: const Duration(milliseconds: 550),
+      );
+      if (!mounted) return;
+      _cameraTick.value++;
+      await _refreshPostsForCurrentViewport();
+      await _recomputeClusters();
+    } catch (e, st) {
+      debugPrint('[MapPage] cluster zoom failed: $e\n$st');
     }
   }
 
@@ -997,8 +1215,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
     // Re-enable auto-expand on gesture
     if (event.source == MapMoveSource.gesture) {
-      if (_manualExpandedIndex != null) {
-        _manualExpandedIndex = null;
+      if (_manualExpandedPostId != null && _manualExpandedMovedTooFar()) {
+        setState(() => _clearExpandedPost());
       }
       if (_autoExpandDisabled) {
         _autoExpandDisabled = false;
@@ -1032,7 +1250,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   // 地图相机停止移动（手势/动画结束）—— 重算聚合
   void _onCameraIdle(MapCameraEvent event) {
-    _recomputeClusters();
+    unawaited(
+      _recomputeClusters().then((_) {
+        if (mounted) {
+          _updateScaleFactors(allowAutoExpand: true);
+        }
+      }),
+    );
   }
 
   /// 根据当前 bounds + zoom 重新分簇
@@ -1134,11 +1358,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   // 地图点击回调
   void _onMapTap(MapLatLng latLng) {
-    final collapsedIndex = _expandedIndex;
     setState(() {
-      _manualExpandedIndex = null;
-      _expandedIndex = null;
-      _suppressedAutoIndex = collapsedIndex;
+      _clearExpandedPost(suppressCurrent: true);
       _autoExpandDisabled = true;
     });
   }
@@ -1146,8 +1367,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   // 构建单点气泡覆盖层（兼容层：被新的 _buildItemOverlay 调用）
   Widget _buildBubbleOverlay(List<PostModel> posts, int index) {
     final post = posts[index];
-    final isExpanded = _expandedIndex == index;
-    final scaleFactor = _scaleFactors[index] ?? 1.0;
+    final isExpanded = _expandedPostId == post.id;
+    final scaleFactor = _scaleFactors[post.id] ?? 1.0;
 
     // 优先用 async 预取的精确原生坐标（含 3D pitch / bearing 修正）。
     // Cache miss 时回退到同步 Mercator 计算，确保气泡不会因为 async cache
@@ -1192,37 +1413,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         scaleFactor: scaleFactor,
         post: post,
         mapRotation: _mapRotation,
-        onTap: () {
-          if (isExpanded) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (c) => DetailPage(postId: post.id)),
-            );
-          } else {
-            // Manual expand - override auto
-            BrowsingHistoryService().addToHistory(post);
-            setState(() {
-              _manualExpandedIndex = index;
-              _expandedIndex = index;
-              _suppressedAutoIndex = null;
-            });
-            if (_jogyMapController != null) {
-              final viewportSize = _jogyMapController!.cameraState.viewportSize;
-              final offset = _expandedBubbleCenterOffset(viewportSize);
-              final target = MapLatLng(
-                post.location.latitude,
-                post.location.longitude,
-              );
-              final adjustedCenter = MapGeoUtils.adjustCenterForScreenOffset(
-                target,
-                16,
-                offset.dx,
-                offset.dy,
-              );
-              _jogyMapController!.moveTo(adjustedCenter, zoom: 16);
-            }
-          }
-        },
+        onTap: () => _handlePostTap(post),
       ),
     );
   }
@@ -1266,23 +1457,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           scaleFactor: 1.0,
           cluster: cluster,
           mapRotation: _mapRotation,
-          onTap: () => _onClusterTap(cluster),
+          onTap: () => _handleClusterTap(cluster),
         ),
       ),
-    );
-  }
-
-  /// 点击聚合：smart zoom 到可以展开此 cluster 的最小 zoom
-  void _onClusterTap(ClusterNode cluster) {
-    final controller = _jogyMapController;
-    if (controller == null) return;
-    final targetZoom = _clusterEngine
-        .getClusterExpansionZoom(cluster)
-        .clamp(0.0, 20.0);
-    controller.moveTo(
-      cluster.center,
-      zoom: targetZoom,
-      duration: const Duration(milliseconds: 600),
     );
   }
 
@@ -1297,8 +1474,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
         // Initialize scale factors if not already done
         if (_scaleFactors.isEmpty && posts.isNotEmpty) {
-          for (int i = 0; i < posts.length; i++) {
-            _scaleFactors[i] = 1.0;
+          for (final post in posts) {
+            _scaleFactors[post.id] = 1.0;
           }
         }
 
@@ -1332,34 +1509,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           });
         }
 
-        // 聚合/单点混合渲染列表。展开态的单点排最后（渲染在最上）
-        final renderItems = _clusterResults.isNotEmpty
-            ? List<ClusterOrPoint>.from(_clusterResults)
-            : posts.map<ClusterOrPoint>(SinglePoint.new).toList();
-
-        // 强制 pin 兜底：刚发布的 post 即使被 cluster_results / supercluster /
-        // 过期 filter / discover 评分等任一环节吞掉，也保证它在屏幕上一定出现。
-        // 详见 [_pinnedPost] 文档；self-clear 在 [_recomputeClusters]。
-        final pinned = _pinnedPost;
-        if (pinned != null) {
-          final already = renderItems.any(
-            (it) => it is SinglePoint && it.post.id == pinned.id,
-          );
-          if (!already) {
-            renderItems.add(SinglePoint(pinned));
-            debugPrint('[MapPage] pinned-overlay injecting id=${pinned.id}');
-          }
-        }
-        if (_expandedIndex != null && _expandedIndex! < posts.length) {
-          final expandedPostId = posts[_expandedIndex!].id;
-          renderItems.sort((a, b) {
-            final aIsExpanded = a is SinglePoint && a.post.id == expandedPostId;
-            final bIsExpanded = b is SinglePoint && b.post.id == expandedPostId;
-            if (aIsExpanded && !bIsExpanded) return 1;
-            if (!aIsExpanded && bIsExpanded) return -1;
-            return 0;
-          });
-        }
+        // 聚合/单点/近距离翻页气泡的互斥渲染数据。
+        final renderData = _buildRenderData(posts);
+        final renderItems = renderData.items;
 
         // 使用用户位置作为中心，如果获取失败则使用第一个 post 位置或 fallback
         final mapCenter =
@@ -1410,27 +1562,22 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                       onTap: _onMapTap,
                     ),
                   ),
-                  // 标记覆盖层。新版用 [PostBubblesOverlay]：
+                  // 标记覆盖层：
                   //  - 不依赖 _isViewportReady gate（视口未就绪时该条静默 skip，下个 tick 自动补上）；
-                  //  - 不依赖 _clusterResults / _postScreenPoints 异步 cache；
+                  //  - 渲染 cluster + 单点混合列表；
                   //  - 每次 _onCameraMove → _cameraTick.value++ 触发 overlay 内部 setState。
-                  //
-                  // GesturePassthroughStack 会让 bubble 和底层 MapWidget 同时进入
-                  // gesture arena：tap 仍由 bubble 处理，pan / pinch / rotate 交给 Mapbox。
-                  //
-                  // 旧的 renderItems / _buildItemOverlay / _pinnedPost / cluster engine
-                  // 路径暂时保留为 dead state（cleanup 留到后续 PR），避免一次性删动
-                  // 太多关联点（_clusterResults、_pinnedPost、_postScreenPoints、
-                  // _lastPostsSignature 等）。
                   if (_jogyMapController != null)
                     PostBubblesOverlay(
                       controller: _jogyMapController!,
                       cameraTick: _cameraTick,
-                      posts: posts,
-                      mapRotation: _mapRotation,
-                      expandedIndex: _expandedIndex,
+                      items: renderItems,
+                      multiPostGroups: renderData.multiPostGroups,
+                      expandedPostId: _expandedPostId,
                       scaleFactors: _scaleFactors,
-                      onTap: _handleBubbleTap,
+                      mapRotation: _mapRotation,
+                      onPostTap: _handlePostTap,
+                      onMultiPostTap: _openPostDetail,
+                      onClusterTap: _handleClusterTap,
                       onBroadcastLike: _handleBroadcastLike,
                       onBroadcastReply: _startBroadcastReply,
                     ),
@@ -2522,4 +2669,23 @@ class _MessageSheetContentState extends State<_MessageSheetContent> {
       ),
     );
   }
+}
+
+class _AutoExpandCandidate {
+  final PostModel post;
+  final double distance;
+  final MapScreenPoint point;
+
+  const _AutoExpandCandidate({
+    required this.post,
+    required this.distance,
+    required this.point,
+  });
+}
+
+class _MapRenderData {
+  final List<ClusterOrPoint> items;
+  final List<MultiPostGroup> multiPostGroups;
+
+  const _MapRenderData({required this.items, required this.multiPostGroups});
 }

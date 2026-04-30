@@ -93,6 +93,11 @@ class ApiConstants {
   // Activity notifications endpoints
   static String get notifications => '$baseUrl/notifications';
   static String notificationById(String id) => '$baseUrl/notifications/$id';
+  static String get notificationsUnreadCount =>
+      '$baseUrl/notifications/unread-count';
+  static String notificationRead(String id) =>
+      '$baseUrl/notifications/$id/read';
+  static String get notificationsReadAll => '$baseUrl/notifications/read-all';
 
   // Search endpoints
   static String get searchGlobal => '$baseUrl/search/global';

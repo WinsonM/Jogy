@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:provider/provider.dart';
+import '../../../presentation/providers/notification_provider.dart';
 import 'chat_page.dart';
 import 'notifications_page.dart';
 
@@ -55,6 +58,10 @@ class _MessagePageState extends State<MessagePage>
     // TODO: 从 API 加载消息列表
     _messages = [];
     _reportUnreadCount();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<NotificationProvider>().refreshUnreadCount();
+    });
   }
 
   void _reportUnreadCount() {
@@ -121,16 +128,21 @@ class _MessagePageState extends State<MessagePage>
     );
   }
 
-  void _openNotifications() {
-    Navigator.push(
+  Future<void> _openNotifications() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const NotificationsPage()),
     );
+    if (!mounted) return;
+    unawaited(context.read<NotificationProvider>().refreshUnreadCount());
   }
 
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
+    final notificationUnread = context
+        .watch<NotificationProvider>()
+        .unreadCount;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
@@ -381,7 +393,7 @@ class _MessagePageState extends State<MessagePage>
                 duration: const Duration(milliseconds: 200),
                 child: IgnorePointer(
                   ignoring: _isSearching,
-                  child: _buildNotificationButton(),
+                  child: _buildNotificationButton(notificationUnread),
                 ),
               ),
             ),
@@ -414,7 +426,7 @@ class _MessagePageState extends State<MessagePage>
     );
   }
 
-  Widget _buildNotificationButton() {
+  Widget _buildNotificationButton(int unreadCount) {
     return GestureDetector(
       onTap: _openNotifications,
       child: ClipRRect(
@@ -435,10 +447,42 @@ class _MessagePageState extends State<MessagePage>
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.notifications_none,
-              color: Colors.black87,
-              size: 24,
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(
+                  Icons.notifications_none,
+                  color: Colors.black87,
+                  size: 24,
+                ),
+                if (unreadCount > 0)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      constraints: const BoxConstraints(minWidth: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white, width: 1.4),
+                      ),
+                      child: Text(
+                        unreadCount > 99 ? '99+' : '$unreadCount',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

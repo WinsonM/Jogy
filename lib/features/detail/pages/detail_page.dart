@@ -210,7 +210,29 @@ class _DetailPageState extends State<DetailPage> {
             body: Center(
               child: _isFetchingPost
                   ? const CircularProgressIndicator()
-                  : const Text('Post not found'),
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.link_off, size: 56, color: Colors.grey[300]),
+                        const SizedBox(height: 12),
+                        Text(
+                          '内容已失效',
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '该内容可能已过期、删除或不可访问',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           );
         }
